@@ -11,6 +11,35 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
+
+
+// promp dùng để chat AI: Sửa đoạn mã sau để thành giao diện động, gọi api từ link https://localhost:7290/api/User/UserLogin + mẫu json gửi đi
+  // mẫu gửi đi
+  // {
+  //   "email": "123",
+  //   "password": "123"
+  // }
+  // mẫu dữ liệu trả về là
+  // {
+  //   "data": {
+  //     "tokenGen": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9zaWQiOiIxMSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL25hbWUiOiIxMjMiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9lbWFpbGFkZHJlc3MiOiIxMjMiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiIwIiwiZXhwIjoxNzQwNDk1ODU1LCJpc3MiOiJuZXdzcGFwZXIuY29tIiwiYXVkIjoidXNlciJ9.48NK9Nr0OJqx4WK7FY9_CCSu42lKU69B-op_viO6SXM",
+  //     "user": {
+  //       "userId": 11,
+  //       "username": "123",
+  //       "password": "123",
+  //       "email": "123",
+  //       "fullname": "1",
+  //       "phonenumber": "123",
+  //       "birthday": "2025-02-25T09:26:01.241",
+  //       "avatar": "string",
+  //       "roleId": 0,
+  //       "createdDate": null,
+  //       "modifiedDate": null
+  //     }
+  //   },
+  //   "statusCode": 1
+  // }
+
 // Import form components của shadcn/ui
 import {
   Form,
@@ -56,14 +85,26 @@ export default function LoginPage() {
   };
 
   // 4. Xử lý khi submit
-  const onSubmit = (data: LoginSchema) => {
+  const onSubmit = async (data: LoginSchema) => {
     // Ở đây bạn gọi API hoặc xử lý logic đăng nhập
-    toast({
-      title: "Đăng ký thành công!",
-      description: "Tài khoản của bạn đã được tạo.",
-      duration: 2
-    });
-    router.push("/profle/saved")
+    try {
+      const response = await fetch("https://localhost:7290/api/User/UserLogin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const result = await response.json();
+
+      if (result) {
+        sessionStorage.setItem("user", JSON.stringify(result));
+        toast({ title: "Login successful!", description: "Welcome back!" });
+        router.push("/profile/saved");
+      } else {
+        toast({ title: "Login failed", description: "Invalid email or password", variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Something went wrong", variant: "destructive" });
+    }
   };
 
   return (

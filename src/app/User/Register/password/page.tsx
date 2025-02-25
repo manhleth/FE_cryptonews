@@ -67,6 +67,7 @@ export default function RegisterStep2Page() {
     toast({
         title: "Đăng ký thành công!",
         description: "Tài khoản của bạn đã được tạo.",
+        duration: 2
       });
     router.push("/User/Login")
   };
