@@ -4,24 +4,54 @@ import { notFound } from "next/navigation";
 import { mockNews } from "@/data/mockData";
 import { FooterCrypto } from "@/components/sections/news/FooterCrypto";
 import { Share2, BookmarkIcon } from "lucide-react";
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import { promises } from "dns";
+import { useAuth } from "@/context/AuthContext";
 
 interface NewsDetailPageProps {
   params: { id: string } | Promise<{ id: string }>;
+}
+interface newsData
+{
+  header: string;
+  title:string;
+  content:string;
+  footer: string;
+  timeReading: number;
+  userName: string;
+  avatar:string;
+  categoryId: number;
+  image: string;
 }
 
 export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const resolvedParams = params instanceof Promise ? params : Promise.resolve(params);
   const { id } = use(resolvedParams);
-  const item = mockNews.find((newsItem) => newsItem.id === Number(id));
-
+  const token = useAuth();
+  const [item, setItem] = useState<newsData | null>(null);
+  useEffect(() => {
+    if (!token || !token.token) return;
+    const item = fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token.token}`
+      }
+    }
+    ).then((res) => {
+      if(!res.ok)
+        throw new Error(`Http error! status: ${res.status}`);
+      return res.json();
+    }).then((data) => {
+      console.log(data.data);
+      setItem(data.data);
+    }).catch((err) => console.log(err));
+  }, [token, id])
   // Nếu không tìm thấy bài viết thì trả về notFound
   if (!item) {
-    notFound();
+    return <div>Vui lòng đăng nhập để xem chi tiết bài viết</div>;
   }
-
   return (
+   
     <div className="max-w-4xl mx-auto p-4 space-y-8">
       {/* Phần header của bài viết */}
       <header className="border-b pb-4">
@@ -29,7 +59,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           {/* Giả sử bạn có một logo hoặc tên trang */}
           <div className="flex items-center gap-2">
             <img
-              src="/api/placeholder/32/32"
+              src="/placeholder/400/250.jpg"
               alt="Coin98 Insights"
               className="w-8 h-8 rounded-full"
             />
@@ -48,14 +78,14 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <img
             src="/api/placeholder/24/24"
-            alt={item.author}
+            alt={item.userName}
             className="w-6 h-6 rounded-full"
           />
-          <span>{item.author}</span>
+          <span>{item.userName}</span>
           <span>•</span>
-          <span>{item.timeAgo}</span>
+          <span>{}</span>
           <span>•</span>
-          <span>{item.readTime}</span>
+          <span>{item.timeReading}</span>
         </div>
       </header>
 
@@ -69,23 +99,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
         />
 
         {/* Đoạn text mô phỏng */}
-        <p>
-          Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu tích hợp mô hình
-          mã nguồn mở này để cải thiện trải nghiệm người dùng. Dự án Venice AI
-          cũng có động thái tương tự khi người dùng có thể trải nghiệm DeepSeek-R1
-          ngay trên ứng dụng.
-        </p>
-        <p>
-          Nếu công suất API của Venice đạt mức 10,000 VCU, và một người dùng nắm
-          giữ 1% tổng số VVV đã stake thì mỗi ngày người đó có quyền sử dụng
-          tương đương 100 VCU. Thế đó, công suất API mà người dùng có thể sử dụng
-          không phải là ảo mà là có giới hạn...
-        </p>
-        <p>
-          Bên cạnh đó, dự án cung cấp khả năng truy cập thị trường mà không yêu
-          cầu đăng ký. Người dùng có thể khai thác sức mạnh của Venice AI để tìm
-          kiếm thông tin chuyên sâu, phân tích dữ liệu và nhiều tính năng hơn nữa.
-        </p>
+        <p>{item.content}</p>
       </article>
 
       {/* Nút share, bookmark... (nếu muốn) */}

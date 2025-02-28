@@ -6,7 +6,7 @@ import { BookmarkIcon } from 'lucide-react';
 
 interface CourseCardProps {
   course: {
-    title: string;
+    Title: string;
     level: string;
     lessons: number;
     duration: string;
@@ -15,10 +15,10 @@ interface CourseCardProps {
 }
 
 export const CourseCard = ({ course }: CourseCardProps) => (
-  <Card className="min-w-[300px] md:min-w-[350px] flex-none">
-    <img src={course.image} alt={course.title} className="w-full h-48 object-cover" />
+  <Card key={course.Title} className="min-w-[300px] md:min-w-[350px] flex-none">
+    <img src={course.image} alt={course.Title} className="w-full h-48 object-cover" />
     <CardContent className="p-4">
-      <h3 className="font-semibold text-lg mb-2 line-clamp-2">{course.title}</h3>
+      <h3 className="font-semibold text-lg mb-2 line-clamp-2">{course.Title}</h3>
       <Badge variant="outline" className="mb-2">
         {course.level}
       </Badge>

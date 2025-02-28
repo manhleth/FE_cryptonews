@@ -7,7 +7,11 @@ export const mockNews = [
       timeAgo: "4 hours ago",
       readTime: "3 min read",
       image: "/placeholder/400/1.jpg",
-      excerpt: "9 ngày kể từ lúc OKX 'nổ phát súng' thông báo niêm yết PI..."
+      excerpt: "9 ngày kể từ lúc OKX 'nổ phát súng' thông báo niêm yết PI...",
+      userName: "",
+      CreatedDate: "",
+      timeReading: "",
+      header: "",
     },
     {
       id: 2,
@@ -16,7 +20,12 @@ export const mockNews = [
       timeAgo: "4 hours ago",
       readTime: "7 min read",
       image: "/placeholder/400/2.jpg",
-      excerpt: "Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu tích hợp..."
+      excerpt: "Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu tích hợp...",
+      userName: "",
+      CreatedDate: "",
+      timeReading: "",
+      header: "",
+      
     },
     {
       id: 3,
@@ -25,33 +34,49 @@ export const mockNews = [
       timeAgo: "6 hours ago",
       readTime: "4 min read",
       image: "/placeholder/400/3.jpg",
-      excerpt: "Dự án CrossFi núp bóng crypto để dụ dỗ nhà đầu tư và bỏ túi..."
+      excerpt: "Dự án CrossFi núp bóng crypto để dụ dỗ nhà đầu tư và bỏ túi...",
+      userName: "",
+      CreatedDate: "",
+      timeReading: "",
+      header: "",
     }
   ];
   
   export const mockCourses = [
     {
       id: 1,
-      title: "Farming 101 - Tối ưu chiến lược farming trong DeFi",
+      Title: "Farming 101 - Tối ưu chiến lược farming trong DeFi",
       level: "Intermediate",
       lessons: 16,
       duration: "About 1 hour",
-      image: "/placeholder/400/250.jpg"
+      image: "/placeholder/400/250.jpg",
+      userName: ""
     },
     {
       id: 2,
-      title: "Blockchain 101 - Blockchain cho người mới",
+      Title: "Blockchain 101 - Blockchain cho người mới",
       level: "Beginner",
       lessons: 23,
       duration: "About 1 hour",
-      image: "/placeholder/400/4.jpg"
+      image: "/placeholder/400/4.jpg",
+      userName: ""
     },
     {
       id: 3,
-      title: "Binance 101 - Hướng dẫn sử dụng sàn Binance",
+      Title: "Binance 101 - Hướng dẫn sử dụng sàn Binance",
       level: "Beginner",
       lessons: 21,
       duration: "About 1 hour",
-      image: "/placeholder/400/250.jpg"
-    }
+      image: "/placeholder/400/250.jpg",
+      userName: ""
+    },
+    {
+      id: 4,
+      Title: "Farming 101 - Tối ưu chiến lược farming trong DeFi",
+      level: "Intermediate",
+      lessons: 16,
+      duration: "About 1 hour",
+      image: "/placeholder/400/250.jpg",
+      userName: ""
+    },
   ];

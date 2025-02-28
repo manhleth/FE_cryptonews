@@ -7,6 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { HeaderCrypto } from "@/components/sections/news/HeaderCrypto";
 import { FooterCrypto } from "@/components/sections/news/FooterCrypto";
 import { CryptoTicker } from "@/components/sections/news/CryptoTicker";
+import { AuthProvider } from "@/context/AuthContext";
 // import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -24,6 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <AuthProvider>
         <HeaderCrypto/>
         <CryptoTicker/>
         {children}
@@ -31,6 +33,7 @@ export default function RootLayout({
         <div className="fixed top-4 right-4 z-50">
           <Toaster />
         </div>
+        </AuthProvider>
       </body>
     </html>
   );

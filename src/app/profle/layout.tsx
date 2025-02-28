@@ -1,18 +1,22 @@
+"use client"; // lưu ý cần khai báo use client nếu đang dùng App Router (Next.js 13+)
+
 import React, { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation"; // import hook này
 import { 
   Pencil, 
-  Link as LinkIcon,
   LayoutGrid,
   User,
   Bookmark,
-  Users,
-  GraduationCap,
-  History,
   Settings
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+
 
 export default function ProfileLayout({ children }: { children: ReactNode }) {
+  const user = useAuth();
+  const fullName = user.user?.fullname;
+  
   return (
     <div className="flex min-h-screen bg-white">
       {/* Sidebar */}
@@ -24,32 +28,23 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               LV
             </div>
             <div className="space-y-1">
-              <h2 className="text-xl font-semibold">Lăng Văn</h2>
+              <h2 className="text-xl font-semibold">{fullName}</h2>
               <p className="text-sm text-gray-500">Add your short bio</p>
             </div>
           </div>
 
           {/* Navigation */}
           <nav className="space-y-1">
-            <NavLink href="/profile" icon={<LayoutGrid className="w-4 h-4" />}>
+            <NavLink href="/profle/contributor" icon={<LayoutGrid className="w-4 h-4" />}>
               Contribution
             </NavLink>
-            <NavLink href="/profile/about" icon={<User className="w-4 h-4" />}>
+            <NavLink href="/profle/about" icon={<User className="w-4 h-4" />}>
               About
             </NavLink>
-            <NavLink href="/profile/saved" icon={<Bookmark className="w-4 h-4" />} active>
+            <NavLink href="/profle/saved" icon={<Bookmark className="w-4 h-4" />}>
               Saved
             </NavLink>
-            <NavLink href="/profile/following" icon={<Users className="w-4 h-4" />}>
-              Following
-            </NavLink>
-            <NavLink href="/profile/learning" icon={<GraduationCap className="w-4 h-4" />}>
-              Learning
-            </NavLink>
-            <NavLink href="/profile/history" icon={<History className="w-4 h-4" />}>
-              Viewing history
-            </NavLink>
-            <NavLink href="/profile/settings" icon={<Settings className="w-4 h-4" />}>
+            <NavLink href="/profle/settings" icon={<Settings className="w-4 h-4" />}>
               Settings
             </NavLink>
           </nav>
@@ -68,7 +63,6 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               <Pencil className="w-4 h-4 mr-2" />
               Edit profile
             </Link>
-            
           </div>
 
           {/* Page Content */}
@@ -83,14 +77,16 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 function NavLink({ 
   href, 
   children, 
-  icon,
-  active = false 
+  icon
 }: { 
   href: string;
   children: ReactNode;
   icon: ReactNode;
-  active?: boolean;
 }) {
+  const pathname = usePathname();
+  // Kiểm tra xem pathname có khớp với href (hoặc startsWith để khớp cả các route con)
+  const active = pathname === href || pathname.startsWith(href);
+
   return (
     <Link
       href={href}
