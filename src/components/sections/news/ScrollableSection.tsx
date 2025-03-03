@@ -5,9 +5,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 interface ScrollableSectionProps {
   title: string;
   children: React.ReactNode;
+  id?:string;
 }
 
-export const ScrollableSection = ({ title, children }: ScrollableSectionProps) => {
+export const ScrollableSection = ({ title, children,id }: ScrollableSectionProps) => {
   const scroll = (direction: 'left' | 'right') => {
     const container = document.getElementById(`scroll-${title}`);
     const scrollAmount = direction === 'left' ? -300 : 300;
@@ -15,7 +16,7 @@ export const ScrollableSection = ({ title, children }: ScrollableSectionProps) =
   };
 
   return (
-    <div className="relative">
+    <div className="relative" id={id}>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold">{title}</h2>
         <div className="flex gap-2">

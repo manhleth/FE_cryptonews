@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -39,7 +39,11 @@ type PasswordSchema = z.infer<typeof passwordSchema>;
 
 export default function RegisterStep2Page() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  console.log("Query string:", searchParams.toString());
+  const email = searchParams.get("email") || "";
+  const displayName = searchParams.get("displayName") || "";
   // 2. Tạo form
   const form = useForm<PasswordSchema>({
     resolver: zodResolver(passwordSchema),
@@ -64,12 +68,39 @@ export default function RegisterStep2Page() {
 
   // 4. Submit
   const onSubmit = (data: PasswordSchema) => {
-    toast({
-        title: "Đăng ký thành công!",
-        description: "Tài khoản của bạn đã được tạo.",
-        duration: 2
-      });
-    router.push("/User/Login")
+
+    const registrationData = {
+      email,
+      username: displayName,
+      password: data.password,
+      fullname: "",
+      phonenumber: "",
+      birthday: "2025-03-01T11:16:40.089Z",
+      avatar: ""
+    };
+    try {
+      const res = fetch("http://localhost:5000/api/User/UserRegister", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(registrationData)
+      }).then((data) => data.json()).then((data) => {
+        if (data.statusCode === 1) {
+          console.log(data.data);
+          toast({
+            title: "Đăng ký thành công!",
+            description: "Tài khoản của bạn đã được tạo.",
+            duration: 2
+          });
+          router.push("/User/Login")
+        }
+      })
+    }
+    catch (err) {
+      console.log(err);
+    }
+
   };
 
   return (

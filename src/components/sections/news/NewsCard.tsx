@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { BookmarkIcon, Clock, Share2 } from 'lucide-react';
 import Link from 'next/link';
-import {useAuth} from "@/context/AuthContext" // Cập nhật đường dẫn tới hook useAuth của bạn
+import { useAuth } from "@/context/AuthContext" // Cập nhật đường dẫn tới hook useAuth của bạn
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface NewsCardProps {
   item: {
@@ -19,6 +20,9 @@ interface NewsCardProps {
     timeReading: string;
     header: string;
     newsID: number;
+    imagesLink: string;
+    userAvartar: string;
+    // thêm author avatar
   }
 }
 
@@ -83,17 +87,16 @@ export const NewsCard = ({ item }: NewsCardProps) => {
     <Link href={`/news/${item.newsID}`}>
       <Card key={item.newsID} className="min-w-[300px] md:min-w-[350px] flex-none">
         <img
-          src={"/placeholder/400/250.jpg"}
+          src={item.imagesLink || "/placeholder/400/250.jpg"}
           alt={item.header}
           className="w-full h-48 object-cover"
         />
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
-            <img
-              src="/api/placeholder/24/24"
-              alt="avatar"
-              className="rounded-full"
-            />
+            <Avatar className="w-6 h-6">
+              <AvatarImage src={item.userAvartar || "/api/placeholder/24/24"} alt="avatarkkk" />
+              <AvatarFallback>AV</AvatarFallback>
+            </Avatar>
             <span className="text-sm text-gray-600">{item.userName}</span>
             <span className="text-sm text-gray-600">•</span>
             <span className="text-sm text-gray-600">{item.timeAgo}</span>

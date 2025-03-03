@@ -14,6 +14,7 @@ interface SavedItem {
   userName: string | null;
   userAvartar: string | null;
   timeAgo: string | null;
+  imagesLink: string;
 }
 
 export default function SavedPage() {
@@ -175,12 +176,12 @@ export default function SavedPage() {
               {posts.map((item) => (
                 <div
                   key={item.newsID}
-                  className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                  className=" border border-gray-200 rounded-lg p-4 shadow-sm"
                 >
                   {/* Ảnh đại diện bài viết (nếu có) */}
                   <div className="w-full h-40 overflow-hidden rounded mb-3">
                     <img
-                      src={item.links || "/images/news/placeholder.jpg"}
+                      src={item.imagesLink || "/images/news/placeholder.jpg"}
                       alt={item.header}
                       className="w-full h-full object-cover"
                     />
@@ -212,7 +213,7 @@ export default function SavedPage() {
                   <div className="flex items-center mt-2 justify-between">
                     {/* "Pill" thời gian đọc */}
                     <span className="px-3 py-1 text-xs rounded-full border border-gray-300 text-gray-600">
-                      {item.timeReading} min read
+                      {item.timeReading}
                     </span>
 
                     {/* Các icon */}
@@ -251,7 +252,7 @@ export default function SavedPage() {
               {courses.map((item) => (
                 <div
                   key={item.newsID}
-                  className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                  className="border border-gray-200 rounded-lg p-4 shadow-sm"
                 >
                   {/* Ảnh đại diện bài viết (nếu có) */}
                   <div className="w-full h-40 overflow-hidden rounded mb-3">
@@ -288,7 +289,7 @@ export default function SavedPage() {
                   <div className="flex items-center mt-2 justify-between">
                     {/* "Pill" thời gian đọc */}
                     <span className="px-3 py-1 text-xs rounded-full border border-gray-300 text-gray-600">
-                      {item.timeReading} min read
+                      {item.timeReading}
                     </span>
 
                     {/* Các icon */}

@@ -7,6 +7,7 @@ import { Share2, BookmarkIcon } from "lucide-react";
 import { use, useEffect, useState } from "react";
 import { promises } from "dns";
 import { useAuth } from "@/context/AuthContext";
+import CommentSection from "@/components/Comments";
 
 interface NewsDetailPageProps {
   params: { id: string } | Promise<{ id: string }>;
@@ -21,7 +22,15 @@ interface newsData
   userName: string;
   avatar:string;
   categoryId: number;
-  image: string;
+  imagesLink: string;
+}
+
+interface Comment {
+  commentId: number;
+  userFullName: string;
+  userAvartar: string;
+  content: string;
+  createdAt: string;
 }
 
 export default function NewsDetailPage({ params }: NewsDetailPageProps) {
@@ -29,6 +38,13 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const { id } = use(resolvedParams);
   const token = useAuth();
   const [item, setItem] = useState<newsData | null>(null);
+
+
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [visibleCount, setVisibleCount] = useState(5); // hiển thị 5 comment đầu
+  const [newComment, setNewComment] = useState("");
+
+
   useEffect(() => {
     if (!token || !token.token) return;
     const item = fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`, {
@@ -46,12 +62,66 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
       setItem(data.data);
     }).catch((err) => console.log(err));
   }, [token, id])
+
+  const handleSubmitComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    fetch(`http://localhost:5000/api/Comments/AddComment`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token.token}`,
+      },
+      body: JSON.stringify({
+        newsId: id,
+        content: newComment,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        // Giả sử API trả về comment mới trong data.data
+        setComments((prev) => [data.data, ...prev]);
+        setNewComment("");
+        setVisibleCount((prev) => prev + 1);
+      })
+      .catch((err) => console.log(err));
+  };
+
+  useEffect(() => {
+    if (!token || !token.token) return;
+    fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
+      headers: {
+        Authorization: `Bearer ${token.token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        // Giả sử API trả về { data: Comment[] }
+        setComments(data.data);
+      })
+      .catch((err) => console.log(err));
+  }, [token, id]); useEffect(() => {
+    if (!token || !token.token) return;
+    fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
+      headers: {
+        Authorization: `Bearer ${token.token}`,
+      },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        // Giả sử API trả về { data: Comment[] }
+        setComments(data.data);
+      })
+      .catch((err) => console.log(err));
+  }, [token, id]);
+
   // Nếu không tìm thấy bài viết thì trả về notFound
   if (!item) {
     return <div>Vui lòng đăng nhập để xem chi tiết bài viết</div>;
   }
+  const displayedComments = comments.slice(0, visibleCount);
   return (
-   
+    
     <div className="max-w-4xl mx-auto p-4 space-y-8">
       {/* Phần header của bài viết */}
       <header className="border-b pb-4">
@@ -63,7 +133,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
               alt="Coin98 Insights"
               className="w-8 h-8 rounded-full"
             />
-            <span className="font-semibold">Coin98 Insights</span>
+            <span className="font-semibold">{item.userName}</span>
           </div>
           <button className="px-3 py-1 border rounded-full text-sm hover:bg-gray-100">
             Follow
@@ -93,7 +163,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
       <article className="space-y-4 leading-relaxed">
         {/* Ảnh minh họa bài viết nếu cần */}
         <img
-          src={item.image}
+          src={item.imagesLink || "/placeholder/400/250.jpg"}
           alt={item.title}
           className="w-full h-auto object-cover rounded-md"
         />
@@ -113,6 +183,8 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           Bookmark
         </button>
       </div>
+
+       <CommentSection newsId={Number(id)}/>
 
       {/* Footer của bài viết - Related Posts */}
       <section className="border-t pt-4">

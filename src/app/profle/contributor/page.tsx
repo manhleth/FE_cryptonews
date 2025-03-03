@@ -9,6 +9,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +22,12 @@ interface Category {
   description: string | null;
   createdDate: string | null;
   modifiedDate: string | null;
+}
+
+interface ChildrenCategory {
+  childrenCategoryName: string;
+  parentCategoryId: number;
+  childrenCategoryID: number;
 }
 
 
@@ -45,7 +52,9 @@ export default function ContributorPage() {
   const [timeReading, setTimeReading] = useState("");
   const [footer, setFooter] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedChildrenCategory, setSelectedChilrenCategory] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [childrenCategories, setChildrenCategories] = useState<ChildrenCategory[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState("");
@@ -61,6 +70,23 @@ export default function ContributorPage() {
       })
       .catch((error) => console.error("Error fetching categories:", error));
   }, []);
+  useEffect(() => {
+    if (selectedCategory) {
+      fetch(`http://localhost:5000/api/ChildrenCategory/GetChildrenCategoriesByParenID?ParentID=${selectedCategory}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${tokenSend}`,
+        }
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.statusCode === 1 && data.data) {
+            console.log(data.data);
+            setChildrenCategories(data.data);
+          }
+        })
+    }
+  }, [selectedCategory])
   useEffect(() => {
     if (!userId) return; // Chưa có userId thì không fetch
     fetch(`http://localhost:5000/api/News/GetYourPost?userid=${userId}`, {
@@ -92,8 +118,30 @@ export default function ContributorPage() {
   // Xử lý submit form
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-  
+
+
+    let finalImagePath = imageUrl; // Nếu không có file mới, dùng giá trị ban đầu
+    // Nếu có file ảnh, tiến hành upload file
+    if (imageFile) {
+      const imageFormData = new FormData();
+      imageFormData.append("image", imageFile);
+      try {
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: imageFormData,
+        });
+        const uploadResult = await uploadRes.json();
+        if (uploadRes.ok) {
+          finalImagePath = uploadResult.filePath;
+        } else {
+          console.error("Image upload failed:", uploadResult.error);
+        }
+      } catch (error) {
+        console.error("Error uploading image:", error);
+      }
+    }
     // Tạo formData cho bài viết mới, bao gồm đường dẫn ảnh (imageUrl)
+    console.log("Đường dẫn ảnh gửi đi: " + finalImagePath);
     const formData = new FormData();
     formData.append("header", head);
     formData.append("title", title);
@@ -102,9 +150,10 @@ export default function ContributorPage() {
     formData.append("footer", footer);
     formData.append("categoryId", selectedCategory);
     formData.append("userId", userId!.toString());
+    formData.append("childrenCategoryId", selectedChildrenCategory);
     // Gửi chuỗi đường dẫn ảnh thay vì file thực tế
-    formData.append("imagesLink", imageUrl);
-  
+    formData.append("imagesLink", finalImagePath);
+
     try {
       const res = await fetch("http://localhost:5000/api/News/CreateNewPost", {
         method: "POST",
@@ -139,16 +188,16 @@ export default function ContributorPage() {
             }
           })
           .catch((error) => console.error("Error fetching your posts:", error));
-      
+
       }
       console.log("Create post result:", result);
-      
+
       // Xử lý sau khi tạo bài viết thành công: thông báo, reset form, đóng dialog, v.v.
     } catch (error) {
       console.error("Error creating post:", error);
     }
   };
-  
+
 
   return (
     <div>
@@ -258,6 +307,30 @@ export default function ContributorPage() {
                     </option>
                   ))}
                 </select>
+
+              </div>
+              {/* Dropdown chọn danh mục con*/}
+              <div className="mb-4">
+                <label
+                  className="block text-sm font-medium mb-1"
+                  htmlFor="category"
+                >
+                  Children Category
+                </label>
+                <select
+                  id="childrenCategory"
+                  name="childrenCategory"
+                  value={selectedChildrenCategory}
+                  onChange={(e) => setSelectedChilrenCategory(e.target.value)}
+                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
+                >
+                  <option value="">Select a children category</option>
+                  {childrenCategories.map((cat) => (
+                    <option key={cat.childrenCategoryID} value={cat.childrenCategoryID}>
+                      {cat.childrenCategoryName}
+                    </option>
+                  ))}
+                </select>
               </div>
               {/* Ô chọn ảnh */}
               <div className="mb-4">
@@ -302,9 +375,11 @@ export default function ContributorPage() {
                 />
               </div>
               <DialogFooter>
-                <Button variant="ghost" type="button">
-                  Cancel
-                </Button>
+                <DialogClose asChild>
+                  <Button type="button" variant="secondary">
+                    Close
+                  </Button>
+                </DialogClose>
                 <Button type="submit" className="bg-yellow-700 hover:bg-yellow-800">
                   Save
                 </Button>
@@ -320,45 +395,45 @@ export default function ContributorPage() {
       ) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {myPosts.map((post) => (
           <Link href={`/news/${post.newsID}`} key={post.newsID}>
-          <div
-            
-            className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
-          >
-            <div className="w-full h-40 overflow-hidden rounded mb-3">
-              <img
-                src={post.imagesLink || "/placeholder/400/1.jpg"}
-                alt={post.title}
-                className="w-full h-full object-cover"
-              />
+            <div
+
+              className="border border-gray-200 rounded-lg p-4 shadow-sm"
+            >
+              <div className="w-full h-40 overflow-hidden rounded mb-3">
+                <img
+                  src={post.imagesLink || "/placeholder/400/1.jpg"}
+                  alt={post.title}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {/* Thông tin tác giả, ngày tạo, v.v. */}
+              <div className="flex items-center text-sm text-gray-500 mb-2">
+                <span className="font-semibold mr-2">
+                  {user.user?.fullname || "You"}
+                </span>
+                <span className="text-xs">
+                  •{" "}
+                  {new Date(post.createdDate).toLocaleDateString("vi-VN", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
+              {/* Tiêu đề, header, v.v. */}
+              <h2 className="text-lg font-bold mb-1">{post.title.slice(0, 50) + "..."}</h2>
+              <p className="text-sm text-gray-700 line-clamp-2">
+                {post.header.slice(0, 50) + "..."}
+              </p>
+              <div className="flex items-center mt-2 text-gray-500 text-xs">
+                <span>{post.timeReading} min read</span>
+              </div>
             </div>
-            {/* Thông tin tác giả, ngày tạo, v.v. */}
-            <div className="flex items-center text-sm text-gray-500 mb-2">
-              <span className="font-semibold mr-2">
-                {user.user?.fullname || "You"}
-              </span>
-              <span className="text-xs">
-                •{" "}
-                {new Date(post.createdDate).toLocaleDateString("vi-VN", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </span>
-            </div>
-            {/* Tiêu đề, header, v.v. */}
-            <h2 className="text-lg font-bold mb-1">{post.title}</h2>
-            <p className="text-sm text-gray-700 line-clamp-2">
-              {post.header}
-            </p>
-            <div className="flex items-center mt-2 text-gray-500 text-xs">
-              <span>{post.timeReading} min read</span>
-            </div>
-          </div>
-        </Link>
+          </Link>
         ))}
       </div>
-      
-    )}
+
+      )}
     </div>
   );
 }

@@ -44,7 +44,9 @@ export default function SignUpForm() {
   // 3. Xử lý khi submit
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     // Ở đây bạn gọi API hoặc xử lý logic đăng ký
-    router.push("/User/Register/password")
+    router.push(`/User/Register/password?email=${encodeURIComponent(
+        values.email
+      )}&displayName=${encodeURIComponent(values.displayName)}`)
   };
 
   return (
