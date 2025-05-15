@@ -111,30 +111,31 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(updateData),
+      }).then((data) => data.json()).then((data) => {
+        if (data.statusCode === 1) {
+          // First close the dialog
+          setOpen(false);
+  
+          // Then refresh the user data
+          refreshUser();
+  
+          // Finally show the success toast
+          toast({
+            title: "Profile Updated",
+            description: "Your profile information has been updated successfully",
+            duration: 2000
+          });
+        } else {
+          toast({
+            title: "Update Failed",
+            description: data.message || "Failed to update profile information",
+            duration: 2000
+          });
+        }
       });
 
-      const data = await res.json();
 
-      if (data.statusCode === 1) {
-        // First close the dialog
-        setOpen(false);
-
-        // Then refresh the user data
-        await refreshUser();
-
-        // Finally show the success toast
-        toast({
-          title: "Profile Updated",
-          description: "Your profile information has been updated successfully",
-          duration: 2000
-        });
-      } else {
-        toast({
-          title: "Update Failed",
-          description: data.message || "Failed to update profile information",
-          duration: 2000
-        });
-      }
+      
     } catch (err) {
       console.error("Error updating profile:", err);
       toast({

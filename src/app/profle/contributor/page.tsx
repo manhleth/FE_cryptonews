@@ -203,7 +203,7 @@ export default function ContributorPage() {
     <div>
       {/* Phần header */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Contributions</h1>
+        <h1 className="text-3xl font-bold">Your Posts</h1>
 
         {/* Nút mở form tạo bài viết mới */}
         <Dialog>

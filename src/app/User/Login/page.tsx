@@ -102,7 +102,7 @@ export default function LoginPage() {
             <span className="text-2xl">🔶</span>
           </div>
           <CardTitle className="text-2xl font-semibold">
-            Sign in to AmberBlocks
+            Sign in to Coin 98
           </CardTitle>
         </CardHeader>
 

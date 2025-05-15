@@ -38,13 +38,16 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const { id } = use(resolvedParams);
   const token = useAuth();
   const [item, setItem] = useState<newsData | null>(null);
-
+  const [isSaved, setIsSaved] = useState(false);
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [visibleCount, setVisibleCount] = useState(5); // hiển thị 5 comment đầu
   const [newComment, setNewComment] = useState("");
+ const [loading, setLoading] = useState(false);
 
-
+ useEffect(() => {
+  console.log("Giá trị isSaved sau khi cập nhật:", isSaved);
+}, [isSaved]);
   useEffect(() => {
     if (!token || !token.token) return;
     const item = fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`, {
@@ -86,7 +89,37 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
       })
       .catch((err) => console.log(err));
   };
+useEffect(() => {
+  const tokenSend = token.token;
+    const fetchSavedNews = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/Saved/GetYourListSaved', {
+          headers: {
+            Authorization: `Bearer ${tokenSend}`
+          }
+        }).then((data) => data.json()).then((data) => {
+        if (data) {
+          // Lấy danh sách newsID từ dữ liệu trả về
+          console.log("Danh sách từ detail: ");
+          console.log(data);
+          const savedNewsIds = data.data.map((saved: any) => saved.newsId);
+          console.log("Danh sách saveds id");
+          console.log(savedNewsIds);
+          
+          setIsSaved(savedNewsIds.includes(Number(id)));
+          console.log(isSaved);
+        }
+        });
+        
+      } catch (error) {
+        // console.error("Error fetching saved news:", error);
+      }
+    };
 
+    if (token) {
+      fetchSavedNews();
+    }
+  }, [token, id]);
   useEffect(() => {
     if (!token || !token.token) return;
     fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
@@ -114,7 +147,30 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
       })
       .catch((err) => console.log(err));
   }, [token, id]);
+const handleBookmarkClick = async (e: React.MouseEvent) => {
+    // Ngăn chặn sự kiện click lan ra ngoài (để không trigger Link)
+    e.preventDefault();
+    e.stopPropagation();
 
+    try {
+      console.log("Gửi lưu bài viết: " + id);
+      const response = await fetch(`http://localhost:5000/api/Saved/AddOrRemoveSaved?newsID=${id}`, {
+        method: 'POST', // Hoặc thay thành GET nếu API của bạn yêu cầu
+        headers: {
+          Authorization: `Bearer ${token.token}`
+        }
+      });
+      if (response.ok) {
+        // Toggle trạng thái bookmark
+        setIsSaved(prev => !prev);
+      } else {
+        console.error("Failed to toggle bookmark");
+      }
+    } catch (error) {
+      console.error("Error toggling bookmark:", error);
+    } finally {
+    }
+  };
   // Nếu không tìm thấy bài viết thì trả về notFound
   if (!item) {
     return <div>Vui lòng đăng nhập để xem chi tiết bài viết</div>;
@@ -125,37 +181,16 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     <div className="max-w-4xl mx-auto p-4 space-y-8">
       {/* Phần header của bài viết */}
       <header className="border-b pb-4">
-        <div className="flex items-center justify-between mb-2">
-          {/* Giả sử bạn có một logo hoặc tên trang */}
-          <div className="flex items-center gap-2">
-            <img
-              src="/placeholder/400/250.jpg"
-              alt="Coin98 Insights"
-              className="w-8 h-8 rounded-full"
-            />
-            <span className="font-semibold">{item.userName}</span>
-          </div>
-          <button className="px-3 py-1 border rounded-full text-sm hover:bg-gray-100">
-            Follow
-          </button>
-        </div>
-
         <h1 className="text-2xl md:text-3xl font-bold mb-2">
           {item.title}
         </h1>
 
         {/* Thông tin tác giả, thời gian */}
         <div className="flex items-center gap-2 text-sm text-gray-500">
-          <img
-            src="/api/placeholder/24/24"
-            alt={item.userName}
-            className="w-6 h-6 rounded-full"
-          />
+        <img src={item.avatar || "/placeholder/24/24.jpg"} alt={item.userName} className="w-6 h-6 rounded-full" />
           <span>{item.userName}</span>
           <span>•</span>
-          <span>{}</span>
-          <span>•</span>
-          <span>{item.timeReading}</span>
+          <span>{item.timeReading+" minute"}</span>
         </div>
       </header>
 
@@ -174,14 +209,28 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
 
       {/* Nút share, bookmark... (nếu muốn) */}
       <div className="flex items-center gap-4">
-        <button className="flex items-center gap-1 px-3 py-2 rounded-md hover:bg-gray-100">
+      <button
+        onClick={() => {
+          const link = window.location.href;
+          navigator.clipboard.writeText(link);
+          alert("Đã sao chép liên kết bài viết!");
+              }}
+          className="flex items-center gap-1 px-3 py-2 rounded-md hover:bg-gray-100">
           <Share2 size={20} />
-          Share
-        </button>
-        <button className="flex items-center gap-1 px-3 py-2 rounded-md hover:bg-gray-100">
-          <BookmarkIcon size={20} />
-          Bookmark
-        </button>
+            Share
+          </button>
+          {/* flex items-center gap-1 px-3 py-2 rounded-md hover:bg-gray-100 text-gray-600 */}
+          <button
+                onClick={handleBookmarkClick}
+                className="cursor-pointer"
+                aria-label="Toggle Bookmark"
+                disabled={loading}
+              >
+                <BookmarkIcon
+                  size={20}
+                  className={`${isSaved ? 'fill-black text-black' : 'text-gray-600'}`}
+                />Bookmark
+              </button>
       </div>
 
        <CommentSection newsId={Number(id)}/>

@@ -24,7 +24,7 @@ interface BlogPost {
 const posts: BlogPost[] = [
   {
     id: 1,
-    author: { name: "nguyennsh", image: "/placeholder/avatar.jpg" },
+    author: { name: "admin", image: "/placeholder/avatar.jpg" },
     timeAgo: "1 hour ago",
     title: "Dự án CrossFi núp bóng crypto lừa đảo 2,000 tỷ VND",
     readTime: "4 min read",
@@ -37,17 +37,17 @@ const posts: BlogPost[] = [
     timeAgo: "2 hours ago",
     title: "PI niêm yết 2 USD, trở thành kèo airdrop lịch sử",
     readTime: "3 min read",
-    thumbnail: "/placeholder/400/250.jpg",
+    thumbnail: "/placeholder/400/PI.JPG",
     excerpt: "9 ngày kể từ lúc OKX 'nổ phát súng' thông báo niêm yết PI...",
   },
   {
     id: 3,
-    author: { name: "nghianq", image: "/placeholder/avatar.jpg" },
+    author: { name: "nghianq", image: "/placeholder/SanVN.JPG" },
     timeAgo: "3 hours ago",
-    title: "Blockchain 'giải cứu' AI khỏi Big Techadhfjajsdhfjahsdkljfhalskdjhfaljsdhfalsjkdhfládjfhakjsdhflakjsdhflakjsdhflajsdhfladsfadfasdfgsdfgsdfgsdfgsdfgsdf?",
+    title: "Việt Nam sắp có sàn giao dịch tiền số thí điểm",
     readTime: "9 min read",
-    thumbnail: "/placeholder/400/250.jpg",
-    excerpt: "Với việc minh bạch hóa dữ liệu, phi tập trung hóa tài nguyên...ahjgkdflđldldldldldldldldldldldldldldldldldldldldldldldldldldldldl",
+    thumbnail: "/placeholder/SanVN.JPG",
+    excerpt: "Việt Nam đang từng bước hoàn thiện khung pháp lý cho lĩnh vực tài sản số và tiền điện tử nhằm đảm bảo tính minh bạch, an toàn cho nhà đầu tư. Trong cuộc họp báo Chính phủ thường kỳ diễn ra chiều ngày 5/3, Thứ trưởng Bộ Tài chính Nguyễn Đức Chi khẳng định rằng tiền điện tử và tài sản số là một lĩnh vực mới với nhiều thách thức, không chỉ tại Việt Nam mà còn trên phạm vi toàn cầu. Nhận thức được tầm quan trọng của việc quản lý lĩnh vực này, Chính phủ đã chỉ đạo các cơ quan chức năng khẩn trương nghiên cứu và xây dựng hành lang pháp lý phù hợp.",
   },
   {
     id: 4,
@@ -55,7 +55,7 @@ const posts: BlogPost[] = [
     timeAgo: "4 hours ago",
     title: "Soon Network: Blockchain layer 2 tương thích SVM",
     readTime: "2 min read",
-    thumbnail: "/placeholder/400/250.jpg",
+    thumbnail: "/placeholder/400/Soon.JPG",
     excerpt: "Soon Network ra lộ trình, tham vọng mở rộng hệ sinh thái...",
   },
   {
@@ -64,7 +64,7 @@ const posts: BlogPost[] = [
     timeAgo: "5 hours ago",
     title: "PI niêm yết 2 USD, trở thành kèo airdrop lịch sử",
     readTime: "3 min read",
-    thumbnail: "/placeholder/400/250.jpg",
+    thumbnail: "/placeholder/400/PI.JPG",
     excerpt: "Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu...",
   },
   {
@@ -73,17 +73,17 @@ const posts: BlogPost[] = [
     timeAgo: "6 hours ago",
     title: "Venice AI (VVY): AI Chatbot tích hợp mô hình AI DeepSeek-R1",
     readTime: "7 min read",
-    thumbnail: "/placeholder/400/250.jpg",
-    excerpt: "Dự án CrossFi núp bóng crypto để dụ dỗ nhà đầu tư...",
+    thumbnail: "/placeholder/400/vvv.png",
+    excerpt: "Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu...",
   },
   {
     id: 7,
-    author: { name: "nguyennsh", image: "/placeholder/avatar.jpg" },
+    author: { name: "admin", image: "/placeholder/avatar.jpg" },
     timeAgo: "7 hours ago",
-    title: "Dự án CrossFi núp bóng crypto lừa đảo 2,000 tỷ VND",
+    title: "Gánh nặng niêm yết Binance của các dự án",
     readTime: "4 min read",
-    thumbnail: "/placeholder/400/avatar.jpg",
-    excerpt: "Dự án CrossFi núp bóng crypto để dụ dỗ nhà đầu tư...",
+    thumbnail: "/placeholder/400/bnb.png",
+    excerpt: "Binance là một trong những sàn giao dịch tập trung lớn nhất thị trường crypto. Để được niêm yết trên sàn giao dịch này, dự án phải đáp ứng nhiều yếu tố như sức ảnh hưởng, cộng đồng và đội ngũ đứng sau. Ngoài ra, yếu tố chi phí cũng là điều mà một dự án cũng cần phải tính đến.",
   },
 ];
 

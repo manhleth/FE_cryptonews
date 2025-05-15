@@ -58,7 +58,7 @@ export default function SignUpForm() {
             <span className="text-2xl">🔶</span>
           </div>
           <CardTitle className="text-2xl font-semibold">
-            Join the AmberBlocks
+            Join Coin 98
           </CardTitle>
         </CardHeader>
 

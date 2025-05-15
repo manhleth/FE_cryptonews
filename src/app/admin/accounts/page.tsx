@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 
 // Định nghĩa kiểu dữ liệu người dùng theo API
@@ -19,24 +20,14 @@ type User = {
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [newRole, setNewRole] = useState<string>("user");
   const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
+  const {toast} = useToast();
+  const { token } = useAuth();
 
-  const {token} = useAuth();
   // State cho thêm tài khoản mới
-  const [newUser, setNewUser] = useState({
-    username: "",
-    email: "",
-    password: "",
-    fullname: "",
-    phonenumber: "",
-    birthday: "",
-    avatar: "",
-    role: "user",
-  });
 
-  // Hard-code token từ API (nên thay bằng cách quản lý token hợp lý)
-  
   // Lấy danh sách người dùng từ API khi component mount
   useEffect(() => {
     fetchUsers();
@@ -78,52 +69,7 @@ export default function UsersPage() {
     }
   };
 
-  // Hàm thêm tài khoản mới qua API POST
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Chuẩn bị payload cho API
-    const payload = {
-      username: newUser.username,
-      password: newUser.password,
-      email: newUser.email,
-      fullname: newUser.fullname,
-      phonenumber: newUser.phonenumber,
-      birthday: newUser.birthday, // Định dạng YYYY-MM-DD
-      avatar: newUser.avatar,
-    };
-    try {
-      const response = await fetch("http://localhost:5000/api/User/UserRegister", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        throw new Error("Lỗi khi thêm người dùng");
-      }
-      const result = await response.json();
-      if (result.statusCode !== 1) {
-        throw new Error("Thêm người dùng không thành công");
-      }
-      // Cập nhật lại danh sách người dùng
-      fetchUsers();
-      // Reset form thêm tài khoản
-      setNewUser({
-        username: "",
-        email: "",
-        password: "",
-        fullname: "",
-        phonenumber: "",
-        birthday: "",
-        avatar: "",
-        role: "user",
-      });
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
+  
 
   // Hàm xóa user qua API DELETE (sử dụng query parameter userID)
   const handleDelete = async (id: number) => {
@@ -145,19 +91,51 @@ export default function UsersPage() {
     }
   };
 
-  // Khi chọn chỉnh sửa user
+  // Hàm cập nhật vai trò người dùng qua API sử dụng endpoint SetAdminRole hoặc SetUserRole
+  const handleUpdateRole = async () => {
+    if (!editingUser) return;
   
-
-  // Hàm cập nhật user qua API POST
- 
+    const roleChange = newRole === "admin" ? 1 : 0;
+    const url = `http://localhost:5000/api/User/SetAdminRole?UserID=${editingUser.id}&RoleChange=${roleChange}`
+  
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ UserID: editingUser.id }),
+      });
+  
+      const result = await response.json();
+      console.log("✅ API Response:", result);
+      toast({
+        title: "Update role success",
+        duration: 3000
+      })
+      if (!response.ok || result.statusCode !== 1) {
+        throw new Error(result.message || "Cập nhật vai trò không thành công");
+      }
+  
+      // Làm mới danh sách người dùng và thoát khỏi chế độ chỉnh sửa
+      fetchUsers();
+      setEditingUser(null);
+    } catch (err: any) {
+      setError(err.message);
+      console.error("❌ Lỗi khi cập nhật vai trò:", err);
+    }
+  };
+  
+  // Hàm hủy chỉnh sửa
+  const handleCancelEdit = () => {
+    setEditingUser(null);
+  };
 
   return (
     <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">Quản lý người dùng</h1>
+      <h1 className="text-3xl font-bold mb-4">Bảo trì tài khoản</h1>
       {error && <p className="text-red-500 mb-4">{error}</p>}
-
-      {/* Form thêm tài khoản mới */}
-      
 
       {/* Danh sách người dùng */}
       <table className="w-full border-collapse">
@@ -188,15 +166,55 @@ export default function UsersPage() {
                   "Chưa có"
                 )}
               </td>
-              <td className="border p-2 text-center">{user.role}</td>
               <td className="border p-2 text-center">
-                
-                <button
-                  onClick={() => handleDelete(user.id)}
-                  className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 ml-2"
-                >
-                  Xoá
-                </button>
+                {editingUser && editingUser.id === user.id ? (
+                  <select
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                    className="border p-1"
+                  >
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                ) : (
+                  user.role
+                )}
+              </td>
+              <td className="border p-2 text-center">
+                {editingUser && editingUser.id === user.id ? (
+                  <>
+                    <button
+                      onClick={handleUpdateRole}
+                      className="bg-green-500 text-white px-2 py-1 rounded hover:bg-green-600"
+                    >
+                      Lưu
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="bg-gray-500 text-white px-2 py-1 rounded hover:bg-gray-600 ml-2"
+                    >
+                      Hủy
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setEditingUser(user);
+                        setNewRole(user.role); // Gán giá trị hiện tại của user
+                      }}
+                      className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
+                    >
+                      Sửa
+                    </button>
+                    <button
+                      onClick={() => handleDelete(user.id)}
+                      className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 ml-2"
+                    >
+                      Xoá
+                    </button>
+                  </>
+                )}
               </td>
             </tr>
           ))}
