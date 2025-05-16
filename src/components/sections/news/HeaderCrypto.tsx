@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +15,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import path from 'path';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
+import Image from "next/image";
+import Link from "next/link";
+
+// ====================================
+// TYPE DEFINITIONS
+// ====================================
 
 interface NewsItem {
   newsID: number;
@@ -31,58 +35,80 @@ interface NewsItem {
   timeAgo: string | null;
   imagesLink: string | null;
 }
+
 interface Category {
   categoryId: number;
   categoryName: string;
 }
 
+// ====================================
+// MAIN HEADER COMPONENT
+// ====================================
 
 export const HeaderCrypto = () => {
+  // ------------------------------------
+  // HOOKS & ROUTER
+  // ------------------------------------
   const router = useRouter();
   const pathname = usePathname();
   const { user: initialUser } = useUser();
+
+  // ------------------------------------
+  // STATE MANAGEMENT
+  // ------------------------------------
+  
+  // User state
   const [user, setUser] = useState(initialUser);
-  // State để lưu trữ danh sách categories
+  
+  // Categories state
   const [categories, setCategories] = useState([]);
-  // State để theo dõi trạng thái loading
   const [loading, setLoading] = useState(true);
-  // State để theo dõi lỗi
   const [error, setError] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
-
+  // Search state
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<NewsItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // Search refs
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-
+  // ------------------------------------
+  // USER MANAGEMENT FUNCTIONS
+  // ------------------------------------
+  
+  // Update user from session storage
   const updateUserFromSession = () => {
     const storedUser = sessionStorage.getItem("user");
     setUser(storedUser ? JSON.parse(storedUser) : null);
   };
+
+  // Listen for user session changes
   useEffect(() => {
-    // Cập nhật user khi component mount
+    // Initial user update
     updateUserFromSession();
 
-    // Lắng nghe sự kiện storage (cho các tab khác)
+    // Listen for storage changes (cross-tab)
     window.addEventListener("storage", updateUserFromSession);
-
-    // Lắng nghe sự kiện tùy chỉnh storageChange (cho cùng tab)
+    
+    // Listen for custom storage changes (same tab)
     window.addEventListener("storageChange", updateUserFromSession);
 
-    // Cleanup khi component unmount
+    // Cleanup event listeners
     return () => {
       window.removeEventListener("storage", updateUserFromSession);
       window.removeEventListener("storageChange", updateUserFromSession);
     };
   }, []);
-  const handleNewsClick = (newsId: number) => {
-    router.push(`/news/${newsId}`);
-    closeSearchDialog();
-  };
+
+  // ------------------------------------
+  // CATEGORIES MANAGEMENT
+  // ------------------------------------
+  
+  // Fetch categories from API
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -92,12 +118,13 @@ export const HeaderCrypto = () => {
         }
         const data = await response.json();
         setCategories(data.data || []);
+        
+        // Update selected category based on current path
         if (pathname) {
           const categoryIdMatch = pathname.match(/\/category\/(\d+)/);
           if (categoryIdMatch && categoryIdMatch[1]) {
             setSelectedCategoryId(parseInt(categoryIdMatch[1]));
           } else if (pathname === '/') {
-            // Home is selected
             setSelectedCategoryId(null);
           }
         }
@@ -107,40 +134,52 @@ export const HeaderCrypto = () => {
         setLoading(false);
       }
     };
+    
     fetchCategories();
-  }, [path]);
+  }, [pathname]);
+
+  // ------------------------------------
+  // SEARCH FUNCTIONALITY
+  // ------------------------------------
+  
+  // Focus search input when dialog opens
   useEffect(() => {
     if (isSearchDialogOpen && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, [isSearchDialogOpen]);
 
+  // Handle search input with debouncing
   const handleSearchInput = (e: any) => {
     const value = e.target.value;
     setSearchTerm(value);
 
-    // Clear any existing timeout
+    // Clear existing timeout
     if (searchTimeout.current) {
       clearTimeout(searchTimeout.current);
     }
 
+    // Clear results if empty
     if (value.trim() === '') {
       setSearchResults([]);
       return;
     }
 
-    // Set a new timeout (2 seconds)
+    // Set debounced search (1 second delay)
     searchTimeout.current = setTimeout(() => {
       performSearch(value);
     }, 1000);
   };
 
+  // Perform actual search API call
   const performSearch = async (keyword: any) => {
     if (!keyword.trim()) return;
 
     setIsSearching(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/News/GetNewsByKeyWord?keyWord=${encodeURIComponent(keyword)}`);
+      const response = await fetch(
+        `http://localhost:5000/api/News/GetNewsByKeyWord?keyWord=${encodeURIComponent(keyword)}`
+      );
       if (!response.ok) {
         throw new Error('Lỗi khi tìm kiếm');
       }
@@ -153,10 +192,12 @@ export const HeaderCrypto = () => {
     }
   };
 
+  // Open search dialog
   const handleSearchClick = () => {
     setIsSearchDialogOpen(true);
   };
 
+  // Close search dialog and reset state
   const closeSearchDialog = () => {
     setIsSearchDialogOpen(false);
     setSearchTerm("");
@@ -165,58 +206,93 @@ export const HeaderCrypto = () => {
       clearTimeout(searchTimeout.current);
     }
   };
-  const formatTimeAgo = (timeAgo: any) => {
-    if (!timeAgo) return "";
-    return timeAgo;
+
+  // Handle news item click in search results
+  const handleNewsClick = (newsId: number) => {
+    router.push(`/news/${newsId}`);
+    closeSearchDialog();
   };
-  const handleSaved = () => {
-    router.push("/profle/saved")
-  }
+
+  // ------------------------------------
+  // NAVIGATION HANDLERS
+  // ------------------------------------
+  
+  // Handle category navigation
   const handleCategoryClick = (categoryId: any) => {
     setSelectedCategoryId(categoryId);
     router.push(`/category/${categoryId}`);
   };
+
+  // Handle home navigation
   const handleHomeClick = (e: any) => {
     e.preventDefault();
     setSelectedCategoryId(null);
     router.push('/');
   };
 
+  // Navigate to saved posts
+  const handleSaved = () => {
+    router.push("/profle/saved");
+  };
+
+  // Navigate to admin panel
   const handleAdmin = () => {
-    router.push('/admin/login')
-  }
+    router.push('/admin/login');
+  };
+
+  // ------------------------------------
+  // AUTHENTICATION HANDLERS
+  // ------------------------------------
+  
+  // Handle user sign out
   const handleSignOut = () => {
-    // Kiểm tra xem có thông tin người dùng trong sessionStorage không
     const user = sessionStorage.getItem("user");
     const token = sessionStorage.getItem("token");
 
     if (user || token) {
+      // Clear session storage
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("token");
-      setUser(null); // Đặt lại state user về null để re-render giao diện
+      
+      // Update state and redirect
+      setUser(null);
       router.push("/User/Login");
     } else {
       router.push("/User/Login");
       console.log("Không có thông tin đăng nhập để xóa.");
     }
-  }
+  };
+
+  // Handle sign in navigation
   const handleSignIn = () => {
     router.push("/User/Login");
   };
+
+  // ------------------------------------
+  // RENDER COMPONENT
+  // ------------------------------------
+  
   return (
-    <header className="w-full ">
+    <header className="w-full">
       <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
-          {/* Logo and Search */}
+          
+          {/* ================== LEFT SECTION - LOGO & SEARCH ================== */}
           <div className="flex items-center flex-1 gap-8">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold text-yellow-500">98</span>
-              <div className="flex flex-col">
-                <span className="font-bold">COIN98</span>
-                <span className="text-xs text-gray-500">INSIGHTS</span>
-              </div>
-            </div>
+            
+            {/* Logo - Image only, link to home */}
+            <Link href="/" className="flex items-center">
+              <Image 
+                src="/logo.png"
+                alt="Logo"
+                width={180}      // Từ 120px tăng lên 180px
+                height={60}      // Từ 40px tăng lên 60px
+                className="h-15 w-auto hover:opacity-80 transition-opacity"  // Từ h-10 (40px) lên h-15 (60px)
+                priority
+                />
+            </Link>
 
+            {/* Search Input */}
             <div className="relative flex-1 max-w-md">
               <Input
                 type="search"
@@ -228,9 +304,20 @@ export const HeaderCrypto = () => {
             </div>
           </div>
 
-          {/* Navigation */}
+          {/* ================== MIDDLE SECTION - NAVIGATION ================== */}
           <nav className="hidden md:flex items-center gap-6 mx-4">
-            <a href="/" className={`text-gray-600 hover:text-gray-900 pb-1 ${selectedCategoryId === null ? 'border-b border-gray-900' : ''}`} onClick={handleHomeClick}>Home</a>
+            {/* Home Link */}
+            <a 
+              href="/" 
+              className={`text-gray-600 hover:text-gray-900 pb-1 ${
+                selectedCategoryId === null ? 'border-b border-gray-900' : ''
+              }`} 
+              onClick={handleHomeClick}
+            >
+              Home
+            </a>
+            
+            {/* Categories Navigation */}
             {loading ? (
               <span>Đang tải...</span>
             ) : error ? (
@@ -240,9 +327,13 @@ export const HeaderCrypto = () => {
                 <a
                   key={category.categoryId}
                   href={`/category/${category.categoryId}`}
-                  className={`text-gray-600 hover:text-gray-900 pb-1 ${selectedCategoryId === category.categoryId ? 'border-b border-gray-900' : ''
-                    }`}
-                  onClick={(e) => { e.preventDefault(); handleCategoryClick(category.categoryId) }}
+                  className={`text-gray-600 hover:text-gray-900 pb-1 ${
+                    selectedCategoryId === category.categoryId ? 'border-b border-gray-900' : ''
+                  }`}
+                  onClick={(e) => { 
+                    e.preventDefault(); 
+                    handleCategoryClick(category.categoryId);
+                  }}
                 >
                   {category.categoryName}
                 </a>
@@ -250,19 +341,24 @@ export const HeaderCrypto = () => {
             )}
           </nav>
 
-          {/* Settings and Sign In */}
-
+          {/* ================== RIGHT SECTION - SETTINGS & USER ================== */}
           <div className="flex items-center gap-4">
+            
+            {/* Settings Dropdown */}
             <div className="relative group">
               <button className="p-2 hover:bg-gray-100 rounded-full">
                 <Settings className="h-5 w-5 text-gray-600" />
               </button>
-              {/* Dropdown, ẩn mặc định và hiện khi hover vào container group */}
+              
+              {/* Theme Switcher Dropdown */}
               <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
                 <ThemeSwitcher />
               </div>
             </div>
+            
+            {/* User Avatar/Sign In */}
             {user ? (
+              /* User is logged in - Show avatar dropdown */
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Avatar className="cursor-pointer">
@@ -271,6 +367,7 @@ export const HeaderCrypto = () => {
                   </Avatar>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56">
+                  {/* User Info */}
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">{user.fullname}</p>
@@ -278,6 +375,8 @@ export const HeaderCrypto = () => {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  
+                  {/* User Actions */}
                   <DropdownMenuItem onClick={handleSaved}>
                     Saved
                   </DropdownMenuItem>
@@ -285,14 +384,17 @@ export const HeaderCrypto = () => {
                     Admin
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  
+                  {/* Sign Out */}
                   <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
                     Sign out
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
+              /* User not logged in - Show sign in button */
               <Button
-                className="bg-orange-600 hover:bg-orange-700"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white"
                 onClick={handleSignIn}
               >
                 Sign In
@@ -301,11 +403,16 @@ export const HeaderCrypto = () => {
           </div>
         </div>
       </div>
+
+      {/* ================== SEARCH DIALOG OVERLAY ================== */}
       {isSearchDialogOpen && (
         <div className="fixed inset-0 z-50 bg-white">
           <ScrollArea className="max-w-7xl mx-auto px-4 py-3 h-screen">
             <div className="max-w-7xl mx-auto mt-2">
+              
+              {/* Search Header */}
               <div className="flex items-center gap-4">
+                {/* Back Button */}
                 <button
                   className="p-2 hover:bg-gray-100 rounded-full"
                   onClick={closeSearchDialog}
@@ -318,6 +425,7 @@ export const HeaderCrypto = () => {
                   </div>
                 </button>
 
+                {/* Search Input in Dialog */}
                 <div className="relative flex-1">
                   <Input
                     ref={searchInputRef}
@@ -328,6 +436,8 @@ export const HeaderCrypto = () => {
                     onChange={handleSearchInput}
                   />
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  
+                  {/* Clear Search Button */}
                   {searchTerm && (
                     <button
                       className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
@@ -336,29 +446,36 @@ export const HeaderCrypto = () => {
                         setSearchResults([]);
                       }}
                     >
-                      {/* <X size={16} /> */}
+                      <X size={16} />
                     </button>
                   )}
                 </div>
               </div>
+              
               {/* Search Results */}
               <div className="mt-6">
                 {isSearching ? (
+                  /* Loading State */
                   <div className="py-4 text-center">Đang tìm kiếm...</div>
                 ) : searchTerm && searchResults.length === 0 ? (
+                  /* No Results State */
                   <div className="py-4 text-center">Không tìm thấy kết quả</div>
                 ) : (
+                  /* Results Display */
                   <>
                     {searchResults.length > 0 && (
                       <div className="mb-4 text-gray-500 font-medium">POSTS</div>
                     )}
+                    
+                    {/* News Items */}
                     <div className="space-y-4">
                       {searchResults.map((news) => (
                         <div
                           key={news.newsID}
-                          className="flex gap-4 py-4 border-b cursor-pointer"
+                          className="flex gap-4 py-4 border-b cursor-pointer hover:bg-gray-50 transition-colors"
                           onClick={() => handleNewsClick(news.newsID)}
                         >
+                          {/* News Image */}
                           <div className="h-16 w-24 bg-gray-200 rounded-md overflow-hidden">
                             {news.imagesLink ? (
                               <img
@@ -372,6 +489,8 @@ export const HeaderCrypto = () => {
                               </div>
                             )}
                           </div>
+                          
+                          {/* News Info */}
                           <div className="flex-1">
                             <h3 className="font-medium text-sm mb-1">{news.header}</h3>
                             <div className="flex gap-2 text-xs text-gray-500">
@@ -390,7 +509,6 @@ export const HeaderCrypto = () => {
           </ScrollArea>
         </div>
       )}
-
     </header>
   );
 };

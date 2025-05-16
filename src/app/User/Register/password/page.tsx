@@ -117,7 +117,7 @@ export default function RegisterStep2Page() {
             Back
           </button>
 
-          <CardTitle className="text-2xl">Join the AmberBlocks</CardTitle>
+          <CardTitle className="text-2xl">Tạo mật khẩu</CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -128,7 +128,7 @@ export default function RegisterStep2Page() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>Mật khẩu</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
@@ -144,28 +144,28 @@ export default function RegisterStep2Page() {
                           hasMinLength ? "text-green-600" : "text-gray-500"
                         )}
                       >
-                        ✓ 8 characters
+                        ✓ Có 8 ký tự trở lên
                       </li>
                       <li
                         className={cn(
                           hasUpperCase ? "text-green-600" : "text-gray-500"
                         )}
                       >
-                        ✓ 1 upper case letter
+                        ✓ Có 1 Chữ viết hoa trở lên
                       </li>
                       <li
                         className={cn(
                           hasDigit ? "text-green-600" : "text-gray-500"
                         )}
                       >
-                        ✓ 1 digit
+                        ✓ Có 1 chữ số trở lên
                       </li>
                       <li
                         className={cn(
                           hasSpecial ? "text-green-600" : "text-gray-500"
                         )}
                       >
-                        ✓ 1 special character (e.g. @, #, $, %, ^...)
+                        ✓ Có trên 1 ký tự đặc biệt (e.g. @, #, $, %, ^...)
                       </li>
                     </ul>
                   </FormItem>
@@ -178,7 +178,7 @@ export default function RegisterStep2Page() {
                 name="confirmPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
+                    <FormLabel>Xác nhận mật khẩu</FormLabel>
                     <FormControl>
                       <Input
                         type="password"
@@ -194,16 +194,16 @@ export default function RegisterStep2Page() {
               {/* Nút Sign up */}
               <Button
                 type="submit"
-                className="w-full bg-[#a67c52] text-white hover:bg-[#936e48]"
+                className="w-full bg-[#10b981] text-white hover:bg-[#059669]"
               >
-                Sign up
+                Đăng ký
               </Button>
 
               {/* Link Sign in */}
               <p className="text-center text-sm text-gray-500 mt-2">
-                Already have an account?{" "}
+                Bạn đã có tài khoản?{" "}
                 <a href="/User/Login" className="font-medium hover:underline">
-                  Sign in
+                  Đăng nhập
                 </a>
               </p>
             </form>

@@ -1,120 +1,321 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { BookmarkIcon, Link2Icon, Clock } from "lucide-react";
+import { BookmarkIcon, Link2Icon, Clock, Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-/** Kiểu dữ liệu mỗi bài */
+// Types
+interface Author {
+  name: string;
+  image: string;
+}
+
 interface BlogPost {
   id: number;
-  author: {
-    name: string;
-    image: string;
-  };
+  author: Author;
   timeAgo: string;
   title: string;
   readTime: string;
   thumbnail: string;
   excerpt: string;
+  views?: number;
+  tags?: string[];
 }
 
-/** 7 bài mẫu */
-const posts: BlogPost[] = [
-  {
-    id: 1,
-    author: { name: "admin", image: "/placeholder/avatar.jpg" },
-    timeAgo: "1 hour ago",
-    title: "Dự án CrossFi núp bóng crypto lừa đảo 2,000 tỷ VND",
-    readTime: "4 min read",
-    thumbnail: "/placeholder/400/250.jpg",
-    excerpt: "Dự án CrossFi núp bóng crypto để dụ dỗ nhà đầu tư...",
-  },
-  {
-    id: 2,
-    author: { name: "nguyennsh", image: "/placeholder/avatar.jpg" },
-    timeAgo: "2 hours ago",
-    title: "PI niêm yết 2 USD, trở thành kèo airdrop lịch sử",
-    readTime: "3 min read",
-    thumbnail: "/placeholder/400/PI.JPG",
-    excerpt: "9 ngày kể từ lúc OKX 'nổ phát súng' thông báo niêm yết PI...",
-  },
-  {
-    id: 3,
-    author: { name: "nghianq", image: "/placeholder/SanVN.JPG" },
-    timeAgo: "3 hours ago",
-    title: "Việt Nam sắp có sàn giao dịch tiền số thí điểm",
-    readTime: "9 min read",
-    thumbnail: "/placeholder/SanVN.JPG",
-    excerpt: "Việt Nam đang từng bước hoàn thiện khung pháp lý cho lĩnh vực tài sản số và tiền điện tử nhằm đảm bảo tính minh bạch, an toàn cho nhà đầu tư. Trong cuộc họp báo Chính phủ thường kỳ diễn ra chiều ngày 5/3, Thứ trưởng Bộ Tài chính Nguyễn Đức Chi khẳng định rằng tiền điện tử và tài sản số là một lĩnh vực mới với nhiều thách thức, không chỉ tại Việt Nam mà còn trên phạm vi toàn cầu. Nhận thức được tầm quan trọng của việc quản lý lĩnh vực này, Chính phủ đã chỉ đạo các cơ quan chức năng khẩn trương nghiên cứu và xây dựng hành lang pháp lý phù hợp.",
-  },
-  {
-    id: 4,
-    author: { name: "nguyennsh", image: "/placeholder/avatar.jpg" },
-    timeAgo: "4 hours ago",
-    title: "Soon Network: Blockchain layer 2 tương thích SVM",
-    readTime: "2 min read",
-    thumbnail: "/placeholder/400/Soon.JPG",
-    excerpt: "Soon Network ra lộ trình, tham vọng mở rộng hệ sinh thái...",
-  },
-  {
-    id: 5,
-    author: { name: "linhnt", image: "/placeholder/avatar.jpg" },
-    timeAgo: "5 hours ago",
-    title: "PI niêm yết 2 USD, trở thành kèo airdrop lịch sử",
-    readTime: "3 min read",
-    thumbnail: "/placeholder/400/PI.JPG",
-    excerpt: "Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu...",
-  },
-  {
-    id: 6,
-    author: { name: "linnht", image: "/placeholder/avatar.jpg" },
-    timeAgo: "6 hours ago",
-    title: "Venice AI (VVY): AI Chatbot tích hợp mô hình AI DeepSeek-R1",
-    readTime: "7 min read",
-    thumbnail: "/placeholder/400/vvv.png",
-    excerpt: "Sau khi DeepSeek-R1 ra mắt, các dự án crypto bắt đầu...",
-  },
-  {
-    id: 7,
-    author: { name: "admin", image: "/placeholder/avatar.jpg" },
-    timeAgo: "7 hours ago",
-    title: "Gánh nặng niêm yết Binance của các dự án",
-    readTime: "4 min read",
-    thumbnail: "/placeholder/400/bnb.png",
-    excerpt: "Binance là một trong những sàn giao dịch tập trung lớn nhất thị trường crypto. Để được niêm yết trên sàn giao dịch này, dự án phải đáp ứng nhiều yếu tố như sức ảnh hưởng, cộng đồng và đội ngũ đứng sau. Ngoài ra, yếu tố chi phí cũng là điều mà một dự án cũng cần phải tính đến.",
-  },
-];
+interface BlogHeaderProps {
+  posts?: BlogPost[];
+  isLoading?: boolean;
+}
 
-export default function BlogHeader() {
-  // 2 bài medium bên trái
-  const leftPosts = posts.slice(0, 2);
+// Utility functions
+const formatViews = (views: number): string => {
+  if (views >= 1000000) return `${(views / 1000000).toFixed(1)}M`;
+  if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
+  return views.toString();
+};
 
-  // 1 bài to nhất ở giữa
-  const centerPost = posts[2];
+// Skeleton Components
+const PostSkeleton: React.FC<{ className?: string }> = ({ className }) => (
+  <Card className={cn("animate-pulse", className)}>
+    <div className="relative w-full h-48 bg-gray-200 rounded-t" />
+    <CardContent className="p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-5 h-5 bg-gray-200 rounded-full" />
+        <div className="w-20 h-4 bg-gray-200 rounded" />
+        <div className="w-16 h-4 bg-gray-200 rounded" />
+      </div>
+      <div className="w-full h-6 bg-gray-200 rounded mb-2" />
+      <div className="w-3/4 h-4 bg-gray-200 rounded mb-4" />
+      <div className="flex justify-between items-center">
+        <div className="w-16 h-4 bg-gray-200 rounded" />
+        <div className="flex gap-2">
+          <div className="w-6 h-6 bg-gray-200 rounded" />
+          <div className="w-6 h-6 bg-gray-200 rounded" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
 
-  // 4 bài nhỏ bên phải
-  const rightPosts = posts.slice(3);
+// Post Components
+interface PostActionsProps {
+  postId: number;
+  views?: number;
+  readTime: string;
+  className?: string;
+}
+
+const PostActions: React.FC<PostActionsProps> = ({ postId, views, readTime, className }) => (
+  <div className={cn("flex items-center justify-between text-sm text-gray-500", className)}>
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1">
+        <Clock className="h-4 w-4" />
+        <span>{readTime}</span>
+      </div>
+      {views && (
+        <div className="flex items-center gap-1">
+          <Eye className="h-4 w-4" />
+          <span>{formatViews(views)}</span>
+        </div>
+      )}
+    </div>
+    <div className="flex gap-2">
+      <button 
+        className="hover:text-gray-700 transition-colors"
+        aria-label="Bookmark post"
+      >
+        <BookmarkIcon className="h-4 w-4" />
+      </button>
+      <button 
+        className="hover:text-gray-700 transition-colors"
+        aria-label="Share post"
+      >
+        <Link2Icon className="h-4 w-4" />
+      </button>
+    </div>
+  </div>
+);
+
+interface AuthorInfoProps {
+  author: Author;
+  timeAgo: string;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+const AuthorInfo: React.FC<AuthorInfoProps> = ({ author, timeAgo, size = 'md' }) => {
+  const sizeClasses = {
+    sm: { avatar: 'h-4 w-4', text: 'text-xs' },
+    md: { avatar: 'h-5 w-5', text: 'text-sm' },
+    lg: { avatar: 'h-6 w-6', text: 'text-base' }
+  };
 
   return (
+    <div className={cn("flex items-center gap-2 text-gray-500", sizeClasses[size].text)}>
+      <Avatar className={sizeClasses[size].avatar}>
+        <AvatarImage src={author.image} alt={author.name} />
+        <AvatarFallback>{author.name[0]?.toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <span className="font-medium">{author.name}</span>
+      <span>•</span>
+      <time dateTime={timeAgo}>{timeAgo}</time>
+    </div>
+  );
+};
+
+// Post Card Components
+interface BasePostCardProps {
+  post: BlogPost;
+  priority?: boolean;
+}
+
+const MediumPostCard: React.FC<BasePostCardProps> = ({ post, priority = false }) => (
+  <Link href={`/news/${post.id}`} className="group">
+    <Card className="border-none shadow-none hover:bg-gray-50 transition-colors">
+      <div className="relative w-full h-48 overflow-hidden rounded-t">
+        <Image
+          src={post.thumbnail}
+          alt={post.title}
+          fill
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          priority={priority}
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+        />
+        {post.views && (
+          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-full text-xs font-medium">
+            <Eye className="inline w-3 h-3 mr-1" />
+            {formatViews(post.views)}
+          </div>
+        )}
+      </div>
+      <CardContent className="p-4">
+        <AuthorInfo author={post.author} timeAgo={post.timeAgo} size="sm" />
+        <h3 className="font-semibold text-base mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+          {post.title}
+        </h3>
+        <p className="text-sm text-gray-600 line-clamp-2 mb-3">
+          {post.excerpt}
+        </p>
+        <PostActions postId={post.id} readTime={post.readTime} />
+      </CardContent>
+    </Card>
+  </Link>
+);
+
+const BiggestPostCard: React.FC<BasePostCardProps> = ({ post, priority = true }) => (
+  <Link href={`/news/${post.id}`} className="group">
+    <Card className="border-none shadow-none hover:bg-gray-50 transition-colors h-full flex flex-col">
+      <div className="relative w-full h-72 overflow-hidden rounded-t">
+        <Image
+          src={post.thumbnail}
+          alt={post.title}
+          fill
+          className="object-cover group-hover:scale-105 transition-transform duration-300"
+          priority={priority}
+          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 66vw, 50vw"
+        />
+        {post.views && (
+          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-full text-sm font-medium">
+            <Eye className="inline w-4 h-4 mr-1" />
+            {formatViews(post.views)}
+          </div>
+        )}
+        {post.tags && post.tags.length > 0 && (
+          <div className="absolute bottom-3 left-3">
+            <span className="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-medium">
+              {post.tags[0]}
+            </span>
+          </div>
+        )}
+      </div>
+      <CardContent className="p-4 flex-1 flex flex-col">
+        <AuthorInfo author={post.author} timeAgo={post.timeAgo} />
+        <h2 className="font-bold text-2xl mb-3 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+          {post.title}
+        </h2>
+        <p className="text-sm text-gray-600 line-clamp-3 mb-4 flex-1">
+          {post.excerpt}
+        </p>
+        <PostActions postId={post.id} views={post.views} readTime={post.readTime} className="mt-auto" />
+      </CardContent>
+    </Card>
+  </Link>
+);
+
+const SmallPostCard: React.FC<BasePostCardProps> = ({ post }) => (
+  <Link href={`/news/${post.id}`} className="group">
+    <Card className="border-none shadow-none hover:bg-gray-50 transition-colors">
+      <div className="flex gap-3 p-3">
+        <div className="relative w-24 h-20 flex-shrink-0 overflow-hidden rounded">
+          <Image
+            src={post.thumbnail}
+            alt={post.title}
+            fill
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
+            sizes="96px"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <AuthorInfo author={post.author} timeAgo={post.timeAgo} size="sm" />
+          <h4 className="font-medium text-sm mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+            {post.title}
+          </h4>
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>{post.readTime}</span>
+            <div className="flex gap-2">
+              <button className="hover:text-gray-700">
+                <BookmarkIcon className="h-3 w-3" />
+              </button>
+              <button className="hover:text-gray-700">
+                <Link2Icon className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  </Link>
+);
+
+// Empty State Component
+const EmptyState: React.FC = () => (
+  <div className="flex flex-col items-center justify-center py-12 text-center">
+    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+      </svg>
+    </div>
+    <h3 className="text-lg font-medium text-gray-900 mb-2">No posts available</h3>
+    <p className="text-gray-500 text-sm">Check back later for new content.</p>
+  </div>
+);
+
+// Main Component
+const BlogHeader: React.FC<BlogHeaderProps> = ({ posts, isLoading = false }) => {
+  const { leftPosts, centerPost, rightPosts } = useMemo(() => {
+    if (!posts || posts.length === 0) {
+      return { leftPosts: [], centerPost: null, rightPosts: [] };
+    }
+
+    return {
+      leftPosts: posts.slice(0, 2),
+      centerPost: posts[2],
+      rightPosts: posts.slice(3)
+    };
+  }, [posts]);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-3 space-y-6">
+            <PostSkeleton />
+            <PostSkeleton />
+          </div>
+          <div className="lg:col-span-6">
+            <PostSkeleton className="h-full" />
+          </div>
+          <div className="lg:col-span-3 space-y-6">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <PostSkeleton key={i} className="h-24" />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Empty state
+  if (!posts || posts.length === 0) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 py-6">
+        <EmptyState />
+      </main>
+    );
+  }
+
+  // Render posts
+  return (
     <main className="max-w-7xl mx-auto px-4 py-6">
-      {/* Chia 3 cột: 3 + 5 + 4 = 12 */}
-      <div className="grid grid-cols-12 gap-6">
-        {/* Cột trái: 2 bài medium */}
-        <div className="col-span-3 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column - 2 medium posts */}
+        <div className="lg:col-span-3 space-y-6">
           {leftPosts.map((post) => (
             <MediumPostCard key={post.id} post={post} />
           ))}
         </div>
 
-        {/* Cột giữa: 1 bài to nhất */}
-        <div className="col-span-6">
-          <BiggestPostCard post={centerPost} />
+        {/* Center Column - 1 big post */}
+        <div className="lg:col-span-6">
+          {centerPost && <BiggestPostCard post={centerPost} />}
         </div>
 
-        {/* Cột phải: 4 bài nhỏ */}
-        <div className="col-span-3 space-y-6">
+        {/* Right Column - 4 small posts */}
+        <div className="lg:col-span-3 space-y-3">
           {rightPosts.map((post) => (
             <SmallPostCard key={post.id} post={post} />
           ))}
@@ -122,151 +323,6 @@ export default function BlogHeader() {
       </div>
     </main>
   );
-}
+};
 
-/** Bài cỡ trung bình (cột trái) */
-function MediumPostCard({ post }: { post: BlogPost }) {
-  return (
-    <Card className="hover:bg-gray-50 cursor-pointer border-none shadow-none">
-      <div className="relative w-full h-48">
-        <Image
-          src={post.thumbnail}
-          alt={post.title}
-          fill
-          className="object-cover rounded-t"
-        />
-      </div>
-      <CardContent className="p-4">
-        {/* Tác giả & thời gian */}
-        <div className="flex items-center gap-2 mb-2 text-sm text-gray-500">
-          <Avatar className="h-5 w-5">
-            <AvatarImage src={post.author.image} />
-            <AvatarFallback>{post.author.name[0]}</AvatarFallback>
-          </Avatar>
-          <span>{post.author.name}</span>
-          <span>•</span>
-          <span>{post.timeAgo}</span>
-        </div>
-
-        {/* Tiêu đề */}
-        <h3 className="font-semibold text-base mb-2 line-clamp-2">
-          {post.title}
-        </h3>
-
-        {/* Mô tả ngắn */}
-        <p className="text-sm text-gray-600 line-clamp-2 mb-3">
-          {post.excerpt}
-        </p>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between text-sm text-gray-500">
-          <div className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            <span>{post.readTime}</span>
-          </div>
-          <div className="flex gap-2">
-            <button className="hover:text-gray-700">
-              <BookmarkIcon className="h-4 w-4" />
-            </button>
-            <button className="hover:text-gray-700">
-              <Link2Icon className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Bài to nhất (cột giữa) */
-function BiggestPostCard({ post }: { post: BlogPost }) {
-  if (!post) return null;
-  return (
-    <Card className="hover:bg-gray-50 cursor-pointer border-none shadow-none h-full flex flex-col">
-      <div className="relative w-full h-72">
-        <Image
-          src={post.thumbnail}
-          alt={post.title}
-          fill
-          className="object-cover rounded-t"
-        />
-      </div>
-      <CardContent className="p-4 flex-1 flex flex-col">
-        {/* Tác giả & thời gian */}
-        <div className="flex items-center gap-2 mb-2 text-sm text-gray-500">
-          <Avatar className="h-5 w-5">
-            <AvatarImage src={post.author.image} />
-            <AvatarFallback>{post.author.name[0]}</AvatarFallback>
-          </Avatar>
-          <span>{post.author.name}</span>
-          <span>•</span>
-          <span>{post.timeAgo}</span>
-        </div>
-
-        {/* Tiêu đề */}
-        <h3 className="font-semibold text-2xl mb-2 line-clamp-2">{post.title}</h3>
-
-        {/* Mô tả ngắn */}
-        <p className="text-sm text-gray-600 line-clamp-3 mb-4">
-          {post.excerpt}
-        </p>
-
-        {/* Footer */}
-        <div className="mt-auto flex items-center justify-between text-sm text-gray-500">
-          <div className="flex items-center gap-1">
-            <Clock className="h-4 w-4" />
-            <span>{post.readTime}</span>
-          </div>
-          <div className="flex gap-2">
-            <button className="hover:text-gray-700">
-              <BookmarkIcon className="h-4 w-4" />
-            </button>
-            <button className="hover:text-gray-700">
-              <Link2Icon className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Bài nhỏ (cột phải) */
-function SmallPostCard({ post }: { post: BlogPost }) {
-  return (
-    <Card className="hover:bg-gray-50 cursor-pointer flex border-none shadow-none">
-      {/* Ảnh nhỏ */}
-      <div className="relative w-24 h-20 flex-shrink-0">
-        <Image
-          src={post.thumbnail}
-          alt={post.title}
-          fill
-          className="object-cover rounded-l"
-        />
-      </div>
-      <CardContent className="p-3 flex-1">
-        <div className="flex items-center gap-2 mb-1 text-xs text-gray-500">
-          <Avatar className="h-4 w-4">
-            <AvatarImage src={post.author.image} />
-            <AvatarFallback>{post.author.name[0]}</AvatarFallback>
-          </Avatar>
-          <span>{post.author.name}</span>
-          <span>•</span>
-          <span>{post.timeAgo}</span>
-        </div>
-        <h4 className="font-medium text-sm mb-1 line-clamp-2">{post.title}</h4>
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>{post.readTime}</span>
-          <div className="flex gap-2">
-            <button className="hover:text-gray-700">
-              <BookmarkIcon className="h-3 w-3" />
-            </button>
-            <button className="hover:text-gray-700">
-              <Link2Icon className="h-3 w-3" />
-            </button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+export default BlogHeader;

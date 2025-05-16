@@ -12,6 +12,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useRouter } from "next/navigation";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import Link from "next/link"; // 👈 Thêm import này
 
 // 1. Định nghĩa schema kiểm tra đầu vào (email, displayName, acceptTerms)
 const formSchema = z.object({
@@ -28,9 +29,10 @@ const formSchema = z.object({
       message: "You must accept the terms",
     }),
 });
-export default function SignUpForm() {
 
-    const router = useRouter();
+export default function SignUpForm() {
+  const router = useRouter();
+  
   // 2. Tạo form hook với react-hook-form + zod
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -53,12 +55,9 @@ export default function SignUpForm() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4">
       <Card className="w-full max-w-sm border-0 shadow-none">
         <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto h-8 w-8">
-            {/* Logo (tuỳ bạn thay) */}
-            <span className="text-2xl">🔶</span>
-          </div>
+      
           <CardTitle className="text-2xl font-semibold">
-            Join Coin 98
+            Join All-In Crypto Insights
           </CardTitle>
         </CardHeader>
 
@@ -72,7 +71,7 @@ export default function SignUpForm() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Enter your email</FormLabel>
+                    <FormLabel>Nhập email</FormLabel>
                     <div className="relative">
                       <Mail className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                       <FormControl>
@@ -95,12 +94,12 @@ export default function SignUpForm() {
                 name="displayName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Your display name</FormLabel>
+                    <FormLabel>Tên hiển thị</FormLabel>
                     <div className="relative">
                       <User className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                       <FormControl>
                         <Input
-                          placeholder="Display name"
+                          placeholder="Tên hiển thị"
                           className="pl-8"
                           {...field}
                         />
@@ -124,9 +123,8 @@ export default function SignUpForm() {
                       />
                     </FormControl>
                     <FormLabel className="leading-none">
-                      I confirm that I am at least 18 years old and agree to 
-                      AmberBlocks Terms of Service, Publisher Terms of Service, 
-                      and Privacy Policy
+                      Tôi xác nhận rằng tôi ít nhất 18 tuổi và đồng ý với 
+                      điều khoản dịch vụ của All-in station và các chính sách bảo mật
                     </FormLabel>
                     <FormMessage className="!mt-1 block" />
                   </FormItem>
@@ -136,17 +134,17 @@ export default function SignUpForm() {
               {/* Nút Continue */}
               <Button
                 type="submit"
-                className="w-full bg-[#a67c52] text-white hover:bg-[#936e48]"
+                className="w-full bg-[#10b981] text-white hover:bg-[#059669]"
               >
                 Continue
               </Button>
 
-              {/* Link Sign in */}
+              {/* Link Sign in - ĐÃ SỬA */}
               <p className="text-center text-sm text-gray-500">
-                Already have an account?{" "}
-                <a href="#" className="font-medium text-gray-900 hover:underline">
-                  Sign in
-                </a>
+                Bạn đã có tài khoản ?{" "}
+                <Link href="/User/Login" className="font-medium text-gray-900 hover:underline">
+                  Đăng nhập
+                </Link>
               </p>
             </form>
           </Form>

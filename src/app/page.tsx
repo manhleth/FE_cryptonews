@@ -54,16 +54,15 @@ export default function Home() {
                 Khám phá thế giới tiền điện tử với những thông tin mới nhất và khóa học chuyên sâu
               </p>
             </div>
-            
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Button size="default" className="bg-white text-emerald-600 hover:bg-gray-50 px-6 py-2 rounded-full font-semibold">
-                Khám phá ngay
+                  Khám phá ngay
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-              <Button variant="outline" size="default" className="border-white text-white hover:bg-white hover:text-emerald-600 px-6 py-2 rounded-full">
-                Xem khóa học
-              </Button>
-            </div>
+              <Button size="default" className="bg-white text-emerald-600 hover:bg-emerald-600 hover:text-white px-6 py-2 rounded-full font-semibold transition-all duration-300">
+                   Xem khóa học
+               </Button>
+              </div>
           </div>
         </div>
       </section>

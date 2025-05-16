@@ -97,12 +97,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-4">
       <Card className="w-full max-w-sm border-0 shadow-none">
         <CardHeader className="space-y-2 text-center">
-          {/* Logo hoặc icon nhỏ ở trên cùng (tùy bạn) */}
-          <div className="mx-auto h-8 w-8">
-            <span className="text-2xl">🔶</span>
-          </div>
           <CardTitle className="text-2xl font-semibold">
-            Sign in to Coin 98
+            Sign in to All-in Crypto Insights
           </CardTitle>
         </CardHeader>
 
@@ -116,7 +112,7 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Enter your email</FormLabel>
+                    <FormLabel>Email đăng nhập</FormLabel>
                     <div className="relative">
                       <Mail
                         className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
@@ -141,7 +137,7 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel>Mật khẩu</FormLabel>
                     <div className="relative">
                       <Lock
                         className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400"
@@ -170,7 +166,7 @@ export default function LoginPage() {
                         href="#"
                         className="text-sm text-gray-500 hover:underline"
                       >
-                        Forgot password
+                        Quên mật khẩu?
                       </a>
                     </div>
                     <FormMessage />
@@ -178,12 +174,12 @@ export default function LoginPage() {
                 )}
               />
 
-              {/* Nút Sign in (màu nâu mô phỏng) */}
+              {/* Nút Sign in) */}
               <Button
                 type="submit"
-                className="w-full bg-[#a67c52] text-white hover:bg-[#936e48]"
+                className="w-full bg-[#10b981] text-white hover:bg-[#059669]"
               >
-                Sign in
+                Đăng nhập
               </Button>
 
               <Separator />
@@ -195,12 +191,12 @@ export default function LoginPage() {
 
               {/* Link Sign up */}
               <div className="text-center text-sm text-gray-500">
-                Don&apos;t have an account?{" "}
+                Bạn chưa có tài khoản?{" "}
                 <a
                   href="/User/Register"
                   className="font-medium text-gray-900 hover:underline"
                 >
-                  Sign up
+                  Đăng ký
                 </a>
               </div>
             </form>

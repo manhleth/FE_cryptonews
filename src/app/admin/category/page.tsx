@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { 
+  FolderTree, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Save, 
+  X, 
+  Folder,
+  FolderOpen,
+  Search,
+  Check,
+  AlertCircle
+} from "lucide-react";
 
 type Category = {
   id: number;
@@ -21,6 +34,7 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryDescription, setNewCategoryDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   // State cho danh mục con
@@ -33,10 +47,15 @@ export default function CategoriesPage() {
   });
   const [isCreatingChild, setIsCreatingChild] = useState(false);
 
+  // Search states
+  const [categorySearchTerm, setCategorySearchTerm] = useState("");
+  const [childSearchTerm, setChildSearchTerm] = useState("");
+
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const valueToken = localStorage.getItem("tokenAdmin");
 
-  // Lấy danh sách danh mục cha từ API
+  // Lấy danh mục từ API khi component mount
   const fetchCategories = async () => {
     try {
       const response = await fetch("http://localhost:5000/api/Category/GetAllCategories", {
@@ -92,13 +111,35 @@ export default function CategoriesPage() {
     fetchChildrenCategories();
   }, []);
 
+  // Clear messages after a few seconds
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError("");
+        setSuccess("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
+  // Filter functions
+  const filteredCategories = categories.filter(category =>
+    category.categoryName.toLowerCase().includes(categorySearchTerm.toLowerCase())
+  );
+
+  const filteredChildrenCategories = childrenCategories.filter(child => {
+    const parentCategory = categories.find(cat => cat.id === child.parentCategoryId);
+    return child.name.toLowerCase().includes(childSearchTerm.toLowerCase()) ||
+           parentCategory?.categoryName.toLowerCase().includes(childSearchTerm.toLowerCase());
+  });
+
   // ======== Phần Danh Mục Cha ========
 
   // Thêm danh mục cha mới
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCategoryName.trim()) {
-      alert("Vui lòng nhập tên danh mục");
+      setError("Vui lòng nhập tên danh mục");
       return;
     }
     try {
@@ -109,13 +150,18 @@ export default function CategoriesPage() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${valueToken}`,
         },
-        body: JSON.stringify({ categoryName: newCategoryName }),
+        body: JSON.stringify({ 
+          categoryName: newCategoryName,
+          description: newCategoryDescription 
+        }),
       });
       const result = await response.json();
       if (!response.ok || result.statusCode !== 1) {
         throw new Error(result.message || "Lỗi khi tạo danh mục");
       }
       setNewCategoryName("");
+      setNewCategoryDescription("");
+      setSuccess("Danh mục đã được tạo thành công!");
       fetchCategories();
     } catch (err: any) {
       setError(err.message);
@@ -132,7 +178,9 @@ export default function CategoriesPage() {
         method: "POST",
         headers: { "Authorization": `Bearer ${valueToken}` },
       });
+      setSuccess("Danh mục đã được xóa thành công!");
       fetchCategories();
+      fetchChildrenCategories(); // Refresh children in case they were deleted
     } catch (err: any) {
       setError(err.message);
     }
@@ -141,7 +189,7 @@ export default function CategoriesPage() {
   // Xóa nhiều danh mục cha đã chọn
   const handleBulkDeleteCategories = async () => {
     if (selectedCategories.length === 0) {
-      alert("Vui lòng chọn ít nhất một danh mục để xóa.");
+      setError("Vui lòng chọn ít nhất một danh mục để xóa.");
       return;
     }
     if (!confirm("Bạn có chắc muốn xóa những danh mục đã chọn?")) return;
@@ -154,7 +202,9 @@ export default function CategoriesPage() {
           })
         )
       );
+      setSuccess(`Đã xóa ${selectedCategories.length} danh mục thành công!`);
       fetchCategories();
+      fetchChildrenCategories();
     } catch (err: any) {
       setError(err.message);
     }
@@ -165,13 +215,20 @@ export default function CategoriesPage() {
     setEditingCategory(category);
   };
 
-  const handleUpdateCategory = (e: React.FormEvent) => {
+  const handleUpdateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingCategory) {
+    if (!editingCategory) return;
+    
+    try {
+      // Note: You'll need to implement the update API endpoint
+      // For now, we'll just update locally
       setCategories(
         categories.map((c) => (c.id === editingCategory.id ? editingCategory : c))
       );
       setEditingCategory(null);
+      setSuccess("Danh mục đã được cập nhật thành công!");
+    } catch (err: any) {
+      setError(err.message);
     }
   };
 
@@ -182,11 +239,11 @@ export default function CategoriesPage() {
   };
 
   const handleSelectAllCategories = (checked: boolean) => {
-    setSelectedCategories(checked ? categories.map((c) => c.id) : []);
+    setSelectedCategories(checked ? filteredCategories.map((c) => c.id) : []);
   };
 
   const allCategoriesSelected =
-    categories.length > 0 && selectedCategories.length === categories.length;
+    filteredCategories.length > 0 && selectedCategories.length === filteredCategories.length;
 
   // ======== Phần Danh Mục Con ========
 
@@ -194,11 +251,11 @@ export default function CategoriesPage() {
   const handleCreateChildCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newChildCategory.name.trim()) {
-      alert("Vui lòng nhập tên danh mục con");
+      setError("Vui lòng nhập tên danh mục con");
       return;
     }
     if (!newChildCategory.parentCategoryId) {
-      alert("Vui lòng chọn danh mục cha");
+      setError("Vui lòng chọn danh mục cha");
       return;
     }
     try {
@@ -222,6 +279,7 @@ export default function CategoriesPage() {
       }
       // Reset form và load lại danh sách danh mục con
       setNewChildCategory({ name: "", parentCategoryId: 0, description: "" });
+      setSuccess("Danh mục con đã được tạo thành công!");
       fetchChildrenCategories();
     } catch (err: any) {
       setError(err.message);
@@ -238,6 +296,7 @@ export default function CategoriesPage() {
         method: "POST",
         headers: { "Authorization": `Bearer ${valueToken}` },
       });
+      setSuccess("Danh mục con đã được xóa thành công!");
       fetchChildrenCategories();
     } catch (err: any) {
       setError(err.message);
@@ -247,7 +306,7 @@ export default function CategoriesPage() {
   // Xóa nhiều danh mục con đã chọn
   const handleBulkDeleteChildCategories = async () => {
     if (selectedChildCategories.length === 0) {
-      alert("Vui lòng chọn ít nhất một danh mục con để xóa.");
+      setError("Vui lòng chọn ít nhất một danh mục con để xóa.");
       return;
     }
     if (!confirm("Bạn có chắc muốn xóa những danh mục con đã chọn?")) return;
@@ -260,6 +319,7 @@ export default function CategoriesPage() {
           })
         )
       );
+      setSuccess(`Đã xóa ${selectedChildCategories.length} danh mục con thành công!`);
       fetchChildrenCategories();
     } catch (err: any) {
       setError(err.message);
@@ -273,275 +333,479 @@ export default function CategoriesPage() {
   };
 
   const handleSelectAllChildCategories = (checked: boolean) => {
-    setSelectedChildCategories(checked ? childrenCategories.map((c) => c.id) : []);
+    setSelectedChildCategories(checked ? filteredChildrenCategories.map((c) => c.id) : []);
   };
 
   const allChildCategoriesSelected =
-    childrenCategories.length > 0 &&
-    selectedChildCategories.length === childrenCategories.length;
+    filteredChildrenCategories.length > 0 &&
+    selectedChildCategories.length === filteredChildrenCategories.length;
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">Quản lý Danh Mục</h1>
-      {error && <p className="text-red-500 mb-4">{error}</p>}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-emerald-100 rounded-lg">
+              <FolderTree className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Quản lý danh mục</h1>
+              <p className="text-gray-600">Tổ chức và quản lý danh mục bài viết</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Danh mục cha</p>
+            <p className="text-2xl font-bold text-emerald-600">{categories.length}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <p className="text-red-600">{error}</p>
+        </div>
+      )}
+      {success && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-2">
+          <Check className="w-5 h-5 text-green-600" />
+          <p className="text-green-600">{success}</p>
+        </div>
+      )}
 
       {/* ===== Phần Danh Mục Cha ===== */}
-      <section className="mb-12">
-        <h2 className="text-2xl font-bold mb-4">Danh Mục Cha</h2>
-        {/* Form Thêm Danh Mục Cha */}
-        <form onSubmit={handleCreateCategory} className="mb-6 space-y-4 border p-4 rounded shadow">
-          <h3 className="text-xl font-bold">Thêm danh mục mới</h3>
-          <div>
-            <label className="block text-gray-700">Tên danh mục</label>
-            <input
-              type="text"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              required
-              className="w-full p-2 border rounded mt-1"
-              placeholder="Nhập tên danh mục"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isCreating}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            {isCreating ? "Đang tạo..." : "Thêm danh mục"}
-          </button>
-        </form>
-
-        {/* Nút Xóa Danh Mục Đã Chọn */}
-        <div className="mb-4">
-          <button
-            onClick={handleBulkDeleteCategories}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-          >
-            Xóa danh mục đã chọn
-          </button>
+      <section className="space-y-6">
+        {/* Category Creation Form */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Folder className="w-5 h-5 mr-2 text-emerald-600" />
+            Thêm danh mục cha mới
+          </h2>
+          <form onSubmit={handleCreateCategory} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="categoryName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Tên danh mục <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="categoryName"
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="Nhập tên danh mục"
+                />
+              </div>
+              <div>
+                <label htmlFor="categoryDescription" className="block text-sm font-medium text-gray-700 mb-1">
+                  Mô tả
+                </label>
+                <input
+                  id="categoryDescription"
+                  type="text"
+                  value={newCategoryDescription}
+                  onChange={(e) => setNewCategoryDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  placeholder="Nhập mô tả danh mục"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isCreating}
+              className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCreating ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              {isCreating ? "Đang tạo..." : "Thêm danh mục"}
+            </button>
+          </form>
         </div>
 
-        {/* Form Chỉnh Sửa Danh Mục Cha */}
-        {editingCategory && (
-          <form onSubmit={handleUpdateCategory} className="mb-6 space-y-4 border p-4 rounded shadow">
-            <h3 className="text-xl font-bold">Chỉnh sửa danh mục</h3>
-            <div>
-              <label className="block text-gray-700">Tên danh mục</label>
-              <input
-                type="text"
-                value={editingCategory.categoryName}
-                onChange={(e) =>
-                  setEditingCategory({ ...editingCategory, categoryName: e.target.value })
-                }
-                required
-                className="w-full p-2 border rounded mt-1"
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700">Mô tả</label>
-              <textarea
-                value={editingCategory.description}
-                onChange={(e) =>
-                  setEditingCategory({ ...editingCategory, description: e.target.value })
-                }
-                required
-                className="w-full p-2 border rounded mt-1"
-              />
-            </div>
-            <div className="flex space-x-4">
-              <button type="submit" className="bg-green-500 text-white p-2 rounded hover:bg-green-600">
-                Cập nhật
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingCategory(null)}
-                className="bg-gray-500 text-white p-2 rounded hover:bg-gray-600"
-              >
-                Hủy
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Danh sách Danh Mục Cha */}
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border p-2 text-center">
-                <input
-                  type="checkbox"
-                  checked={allCategoriesSelected}
-                  onChange={(e) => handleSelectAllCategories(e.target.checked)}
-                />
-              </th>
-              <th className="border p-2">ID</th>
-              <th className="border p-2">Tên danh mục</th>
-              <th className="border p-2">Mô tả</th>
-              <th className="border p-2">Hành động</th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.map((category) => (
-              <tr key={category.id}>
-                <td className="border p-2 text-center">
+        {/* Category List */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+              <h2 className="text-lg font-semibold text-gray-900">Danh sách danh mục cha</h2>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <input
-                    type="checkbox"
-                    checked={selectedCategories.includes(category.id)}
-                    onChange={(e) => handleSelectCategory(category.id, e.target.checked)}
+                    type="text"
+                    placeholder="Tìm kiếm danh mục..."
+                    value={categorySearchTerm}
+                    onChange={(e) => setCategorySearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 w-full sm:w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
-                </td>
-                <td className="border p-2 text-center">{category.id}</td>
-                <td className="border p-2">{category.categoryName}</td>
-                <td className="border p-2">{category.description}</td>
-                <td className="border p-2 text-center">
-                  <button
-                    onClick={() => handleEditCategory(category)}
-                    className="bg-yellow-500 text-white px-2 py-1 rounded hover:bg-yellow-600"
-                  >
-                    Sửa
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCategory(category.id)}
-                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 ml-2"
-                  >
-                    Xoá
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {categories.length === 0 && (
-              <tr>
-                <td className="border p-2 text-center" colSpan={5}>
-                  Không có danh mục nào.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                </div>
+                <button
+                  onClick={handleBulkDeleteCategories}
+                  disabled={selectedCategories.length === 0}
+                  className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Xóa đã chọn ({selectedCategories.length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="w-12 px-6 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allCategoriesSelected}
+                      onChange={(e) => handleSelectAllCategories(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500"
+                    />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tên danh mục
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Mô tả
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredCategories.map((category) => (
+                  <tr key={category.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.includes(category.id)}
+                        onChange={(e) => handleSelectCategory(category.id, e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      #{category.id}
+                    </td>
+                    <td className="px-6 py-4">
+                      {editingCategory && editingCategory.id === category.id ? (
+                        <input
+                          type="text"
+                          value={editingCategory.categoryName}
+                          onChange={(e) =>
+                            setEditingCategory({ ...editingCategory, categoryName: e.target.value })
+                          }
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      ) : (
+                        <div className="flex items-center">
+                          <Folder className="w-4 h-4 text-emerald-600 mr-2" />
+                          <span className="text-sm font-medium text-gray-900">{category.categoryName}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {editingCategory && editingCategory.id === category.id ? (
+                        <textarea
+                          value={editingCategory.description}
+                          onChange={(e) =>
+                            setEditingCategory({ ...editingCategory, description: e.target.value })
+                          }
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          rows={2}
+                        />
+                      ) : (
+                        <span className="text-sm text-gray-600">{category.description || "Chưa có mô tả"}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      {editingCategory && editingCategory.id === category.id ? (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={handleUpdateCategory}
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-emerald-600 hover:bg-emerald-700"
+                          >
+                            <Save className="w-3 h-3 mr-1" />
+                            Lưu
+                          </button>
+                          <button
+                            onClick={() => setEditingCategory(null)}
+                            className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Hủy
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEditCategory(category)}
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-emerald-600 bg-emerald-100 hover:bg-emerald-200"
+                          >
+                            <Edit3 className="w-3 h-3 mr-1" />
+                            Sửa
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(category.id)}
+                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-red-600 bg-red-100 hover:bg-red-200"
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Xoá
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredCategories.length === 0 && (
+                  <tr>
+                    <td className="px-6 py-12 text-center" colSpan={5}>
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="p-3 bg-gray-100 rounded-full">
+                          <Folder className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <p className="text-gray-500">
+                          {categorySearchTerm ? "Không tìm thấy danh mục phù hợp" : "Chưa có danh mục nào"}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       {/* ===== Phần Danh Mục Con ===== */}
-      <section>
-        <h2 className="text-2xl font-bold mb-4">Danh Mục Con</h2>
-        {/* Form Thêm Danh Mục Con */}
-        <form onSubmit={handleCreateChildCategory} className="mb-6 space-y-4 border p-4 rounded shadow">
-          <h3 className="text-xl font-bold">Thêm danh mục con mới</h3>
-          <div>
-            <label className="block text-gray-700">Tên danh mục con</label>
-            <input
-              type="text"
-              value={newChildCategory.name}
-              onChange={(e) => setNewChildCategory({ ...newChildCategory, name: e.target.value })}
-              required
-              className="w-full p-2 border rounded mt-1"
-              placeholder="Nhập tên danh mục con"
-            />
-          </div>
-          <div>
-            <label className="block text-gray-700">Danh mục cha</label>
-            <select
-              value={newChildCategory.parentCategoryId}
-              onChange={(e) =>
-                setNewChildCategory({ ...newChildCategory, parentCategoryId: Number(e.target.value) })
-              }
-              required
-              className="w-full p-2 border rounded mt-1"
+      <section className="space-y-6">
+        {/* Children Category Creation Form */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <FolderOpen className="w-5 h-5 mr-2 text-blue-600" />
+            Thêm danh mục con mới
+          </h2>
+          <form onSubmit={handleCreateChildCategory} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="childCategoryName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Tên danh mục con <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="childCategoryName"
+                  type="text"
+                  value={newChildCategory.name}
+                  onChange={(e) => setNewChildCategory({ ...newChildCategory, name: e.target.value })}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Nhập tên danh mục con"
+                />
+              </div>
+              <div>
+                <label htmlFor="parentCategory" className="block text-sm font-medium text-gray-700 mb-1">
+                  Danh mục cha <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="parentCategory"
+                  value={newChildCategory.parentCategoryId}
+                  onChange={(e) =>
+                    setNewChildCategory({ ...newChildCategory, parentCategoryId: Number(e.target.value) })
+                  }
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value={0}>-- Chọn danh mục cha --</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.categoryName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="childCategoryDescription" className="block text-sm font-medium text-gray-700 mb-1">
+                  Mô tả
+                </label>
+                <input
+                  id="childCategoryDescription"
+                  type="text"
+                  value={newChildCategory.description}
+                  onChange={(e) =>
+                    setNewChildCategory({ ...newChildCategory, description: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Nhập mô tả"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={isCreatingChild}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value={0}>-- Chọn danh mục cha --</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.categoryName}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-gray-700">Mô tả</label>
-            <textarea
-              value={newChildCategory.description}
-              onChange={(e) =>
-                setNewChildCategory({ ...newChildCategory, description: e.target.value })
-              }
-              className="w-full p-2 border rounded mt-1"
-              placeholder="Nhập mô tả (nếu cần)"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isCreatingChild}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            {isCreatingChild ? "Đang tạo..." : "Thêm danh mục con"}
-          </button>
-        </form>
-
-        {/* Nút Xóa Danh Mục Con Đã Chọn */}
-        <div className="mb-4">
-          <button
-            onClick={handleBulkDeleteChildCategories}
-            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-          >
-            Xóa danh mục con đã chọn
-          </button>
+              {isCreatingChild ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              {isCreatingChild ? "Đang tạo..." : "Thêm danh mục con"}
+            </button>
+          </form>
         </div>
 
-        {/* Danh sách Danh Mục Con */}
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-200">
-              <th className="border p-2 text-center">
-                <input
-                  type="checkbox"
-                  checked={allChildCategoriesSelected}
-                  onChange={(e) => handleSelectAllChildCategories(e.target.checked)}
-                />
-              </th>
-              <th className="border p-2">ID</th>
-              <th className="border p-2">Tên danh mục con</th>
-              <th className="border p-2">Danh mục cha</th>
-              <th className="border p-2">Mô tả</th>
-              <th className="border p-2">Hành động</th>
-            </tr>
-          </thead>
-          <tbody>
-            {childrenCategories.map((child) => (
-              <tr key={child.id}>
-                <td className="border p-2 text-center">
+        {/* Children Category List */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+              <h2 className="text-lg font-semibold text-gray-900">Danh sách danh mục con</h2>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <input
-                    type="checkbox"
-                    checked={selectedChildCategories.includes(child.id)}
-                    onChange={(e) => handleSelectChildCategory(child.id, e.target.checked)}
+                    type="text"
+                    placeholder="Tìm kiếm danh mục con..."
+                    value={childSearchTerm}
+                    onChange={(e) => setChildSearchTerm(e.target.value)}
+                    className="pl-10 pr-4 py-2 w-full sm:w-64 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                </td>
-                <td className="border p-2 text-center">{child.id}</td>
-                <td className="border p-2">{child.name}</td>
-                <td className="border p-2">
-                  {
-                    // Hiển thị tên danh mục cha dựa vào parentCategoryId
-                    categories.find((cat) => cat.id === child.parentCategoryId)?.categoryName || "N/A"
-                  }
-                </td>
-                <td className="border p-2">{child.description}</td>
-                <td className="border p-2 text-center">
-                  <button
-                    onClick={() => handleDeleteChildCategory(child.id)}
-                    className="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600"
-                  >
-                    Xoá
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {childrenCategories.length === 0 && (
-              <tr>
-                <td className="border p-2 text-center" colSpan={6}>
-                  Không có danh mục con nào.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                </div>
+                <button
+                  onClick={handleBulkDeleteChildCategories}
+                  disabled={selectedChildCategories.length === 0}
+                  className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Xóa đã chọn ({selectedChildCategories.length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="w-12 px-6 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allChildCategoriesSelected}
+                      onChange={(e) => handleSelectAllChildCategories(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tên danh mục con
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Danh mục cha
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Mô tả
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredChildrenCategories.map((child) => (
+                  <tr key={child.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedChildCategories.includes(child.id)}
+                        onChange={(e) => handleSelectChildCategory(child.id, e.target.checked)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      #{child.id}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <FolderOpen className="w-4 h-4 text-blue-600 mr-2" />
+                        <span className="text-sm font-medium text-gray-900">{child.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <Folder className="w-4 h-4 text-emerald-600 mr-2" />
+                        <span className="text-sm text-gray-600">
+                          {categories.find((cat) => cat.id === child.parentCategoryId)?.categoryName || "N/A"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-gray-600">{child.description || "Chưa có mô tả"}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => handleDeleteChildCategory(child.id)}
+                        className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-red-600 bg-red-100 hover:bg-red-200"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Xoá
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredChildrenCategories.length === 0 && (
+                  <tr>
+                    <td className="px-6 py-12 text-center" colSpan={6}>
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="p-3 bg-gray-100 rounded-full">
+                          <FolderOpen className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <p className="text-gray-500">
+                          {childSearchTerm ? "Không tìm thấy danh mục con phù hợp" : "Chưa có danh mục con nào"}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Tổng danh mục cha</p>
+              <p className="text-2xl font-bold text-emerald-600">{categories.length}</p>
+            </div>
+            <div className="p-3 bg-emerald-100 rounded-lg">
+              <Folder className="w-6 h-6 text-emerald-600" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600">Tổng danh mục con</p>
+              <p className="text-2xl font-bold text-blue-600">{childrenCategories.length}</p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <FolderOpen className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

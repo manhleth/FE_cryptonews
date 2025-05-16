@@ -1,39 +1,130 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
+import { 
+  Users, 
+  FileText, 
+  FolderTree, 
+  MessageCircle, 
+  LayoutDashboard,
+  Menu,
+  X
+} from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const menuItems = [
+    {
+      href: "/admin/accounts",
+      icon: Users,
+      label: "Bảo trì tài khoản"
+    },
+    {
+      href: "/admin/news",
+      icon: FileText,
+      label: "Bảo trì tin tức"
+    },
+    {
+      href: "/admin/category",
+      icon: FolderTree,
+      label: "Bảo trì danh mục"
+    },
+    {
+      href: "/admin/comments",
+      icon: MessageCircle,
+      label: "Quản lý bình luận"
+    }
+  ];
+
   return (
     <div className="flex h-screen bg-gray-100">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 lg:hidden z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">Admin Panel</h2>
-        <nav>
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-50
+        w-64 bg-white shadow-lg
+        transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0 transition-transform duration-300 ease-in-out
+      `}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+              <LayoutDashboard className="w-5 h-5 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-800">Admin Panel</h2>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="p-4">
           <ul className="space-y-2">
-            <li>
-              <Link href="/admin/accounts" className="block p-2 hover:bg-gray-200 rounded">
-                Bảo trì tài khoản
-              </Link>
-            </li>
-            <li>
-              <Link href="/admin/news" className="block p-2 hover:bg-gray-200 rounded">
-                Bảo trì tin tức
-              </Link>
-            </li>
-            <li>
-              <Link href="/admin/category" className="block p-2 hover:bg-gray-200 rounded">
-                Bảo trì danh mục bài viết
-              </Link>
-            </li>
-            <li>
-              <Link href="/admin/comments" className="block p-2 hover:bg-gray-200 rounded">
-                Quản lý bình luận
-              </Link>
-            </li>
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <li key={item.href}>
+                  <Link 
+                    href={item.href} 
+                    className="flex items-center space-x-3 px-4 py-3 text-gray-700 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 transition-colors duration-200 group"
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <Icon className="w-5 h-5 group-hover:text-emerald-600" />
+                    <span className="font-medium">{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
+
+        {/* Footer */}
+        <div className="absolute bottom-4 left-4 right-4">
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <p className="text-xs text-gray-500 text-center">
+              Admin Dashboard v1.0
+            </p>
+          </div>
+        </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <header className="bg-white shadow-sm border-b border-gray-200 p-4 lg:hidden">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h1 className="text-lg font-semibold text-gray-800">Admin Panel</h1>
+            <div className="w-8"></div> {/* Spacer for centering */}
+          </div>
+        </header>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto bg-gray-50 p-6">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
