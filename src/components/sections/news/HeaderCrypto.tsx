@@ -281,15 +281,19 @@ export const HeaderCrypto = () => {
           <div className="flex items-center flex-1 gap-8">
             
             {/* Logo - Image only, link to home */}
-            <Link href="/" className="flex items-center">
-              <Image 
-                src="/logo.png"
-                alt="Logo"
-                width={180}      // Từ 120px tăng lên 180px
-                height={60}      // Từ 40px tăng lên 60px
-                className="h-15 w-auto hover:opacity-80 transition-opacity"  // Từ h-10 (40px) lên h-15 (60px)
-                priority
-                />
+                 <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              <div className="relative">
+                <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center">
+                  <span className="text-white text-3xl font-bold">₿</span>
+                </div>
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs">↗</span>
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-2xl font-bold text-emerald-600">ALL-IN</span>
+                <span className="text-sm font-medium text-emerald-600 tracking-wider">CRYPTOINSIGHTS</span>
+              </div>
             </Link>
 
             {/* Search Input */}

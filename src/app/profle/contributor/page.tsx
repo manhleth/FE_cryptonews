@@ -15,6 +15,12 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { useToast } from "@/hooks/use-toast";
+import { Pencil, BookOpen, Calendar, User, FileText, Info, Plus, Loader2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 interface Category {
   categoryId: number;
@@ -41,9 +47,10 @@ interface Post {
 }
 
 export default function ContributorPage() {
-  const user = useAuth();
-  const userId = user.user?.userId;
-  const tokenSend = user.token;
+  const { user, token } = useAuth();
+  const userId = user?.userId;
+  const tokenSend = token;
+  const { toast } = useToast();
 
   // Các state để lưu dữ liệu form
   const [head, setHead] = useState("");
@@ -59,50 +66,79 @@ export default function ContributorPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [myPosts, setMyPosts] = useState<Post[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
   // Lấy danh mục từ API khi component mount
   useEffect(() => {
-    fetch("http://localhost:5000/api/Category/GetAllCategories")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.statusCode === 1 && data.data) {
-          setCategories(data.data);
-        }
-      })
-      .catch((error) => console.error("Error fetching categories:", error));
+    fetchCategories();
   }, []);
+
+  // Lấy danh mục con khi danh mục cha thay đổi
   useEffect(() => {
     if (selectedCategory) {
-      fetch(`http://localhost:5000/api/ChildrenCategory/GetChildrenCategoriesByParenID?ParentID=${selectedCategory}`, {
+      fetchChildrenCategories(selectedCategory);
+    }
+  }, [selectedCategory]);
+
+  // Lấy bài viết của người dùng
+  useEffect(() => {
+    if (!userId) return;
+    fetchUserPosts();
+  }, [userId, tokenSend]);
+
+  // Fetch danh mục cha
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/Category/GetAllCategories");
+      const data = await response.json();
+      if (data.statusCode === 1 && data.data) {
+        setCategories(data.data);
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy danh mục:", error);
+    }
+  };
+
+  // Fetch danh mục con
+  const fetchChildrenCategories = async (parentId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/ChildrenCategory/GetChildrenCategoriesByParenID?ParentID=${parentId}`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${tokenSend}`,
         }
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.statusCode === 1 && data.data) {
-            console.log(data.data);
-            setChildrenCategories(data.data);
-          }
-        })
+      });
+      const data = await response.json();
+      if (data.statusCode === 1 && data.data) {
+        setChildrenCategories(data.data);
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy danh mục con:", error);
     }
-  }, [selectedCategory])
-  useEffect(() => {
-    if (!userId) return; // Chưa có userId thì không fetch
-    fetch(`http://localhost:5000/api/News/GetYourPost?userid=${userId}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${tokenSend}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.statusCode === 1 && data.data) {
-          setMyPosts(data.data);
-        }
-      })
-      .catch((error) => console.error("Error fetching your posts:", error));
-  }, [userId, tokenSend]);
+  };
+
+  // Fetch bài viết của người dùng
+  const fetchUserPosts = async () => {
+    setLoadingPosts(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/News/GetYourPost?userid=${userId}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${tokenSend}`,
+        },
+      });
+      const data = await response.json();
+      if (data.statusCode === 1 && data.data) {
+        setMyPosts(data.data);
+      }
+    } catch (error) {
+      console.error("Lỗi khi lấy bài viết của bạn:", error);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
 
   // Xử lý thay đổi file ảnh và tạo preview
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,12 +151,38 @@ export default function ContributorPage() {
     }
   };
 
+  // Reset form
+  const resetForm = () => {
+    setHead("");
+    setTitle("");
+    setContent("");
+    setTimeReading("");
+    setFooter("");
+    setSelectedCategory("");
+    setSelectedChilrenCategory("");
+    setImageFile(null);
+    setImagePreview(null);
+    setImageUrl("");
+  };
+
   // Xử lý submit form
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
+    // Validate form
+    if (!head.trim() || !title.trim() || !content.trim() || !timeReading || !selectedCategory || !selectedChildrenCategory) {
+      toast({
+        title: "Vui lòng điền đầy đủ thông tin",
+        description: "Hãy kiểm tra lại các trường bắt buộc",
+        variant: "destructive",
+        duration: 3000
+      });
+      setIsSubmitting(false);
+      return;
+    }
 
-    let finalImagePath = imageUrl; // Nếu không có file mới, dùng giá trị ban đầu
+    let finalImagePath = imageUrl;
     // Nếu có file ảnh, tiến hành upload file
     if (imageFile) {
       const imageFormData = new FormData();
@@ -134,14 +196,29 @@ export default function ContributorPage() {
         if (uploadRes.ok) {
           finalImagePath = uploadResult.filePath;
         } else {
-          console.error("Image upload failed:", uploadResult.error);
+          toast({
+            title: "Lỗi tải ảnh",
+            description: "Không thể tải ảnh lên, vui lòng thử lại",
+            variant: "destructive",
+            duration: 3000
+          });
+          setIsSubmitting(false);
+          return;
         }
       } catch (error) {
-        console.error("Error uploading image:", error);
+        console.error("Lỗi khi tải ảnh lên:", error);
+        toast({
+          title: "Lỗi tải ảnh",
+          description: "Đã xảy ra lỗi khi tải ảnh lên",
+          variant: "destructive",
+          duration: 3000
+        });
+        setIsSubmitting(false);
+        return;
       }
     }
-    // Tạo formData cho bài viết mới, bao gồm đường dẫn ảnh (imageUrl)
-    console.log("Đường dẫn ảnh gửi đi: " + finalImagePath);
+
+    // Tạo formData cho bài viết mới
     const formData = new FormData();
     formData.append("header", head);
     formData.append("title", title);
@@ -151,7 +228,6 @@ export default function ContributorPage() {
     formData.append("categoryId", selectedCategory);
     formData.append("userId", userId!.toString());
     formData.append("childrenCategoryId", selectedChildrenCategory);
-    // Gửi chuỗi đường dẫn ảnh thay vì file thực tế
     formData.append("imagesLink", finalImagePath);
 
     try {
@@ -159,280 +235,355 @@ export default function ContributorPage() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${tokenSend}`,
-          // Không cần set Content-Type khi dùng FormData
         },
         body: formData,
       });
+      
       const result = await res.json();
       if (result && result.statusCode === 1) {
-        // Reset form
-        setHead("");
-        setTitle("");
-        setContent("");
-        setTimeReading("");
-        setFooter("");
-        setSelectedCategory("");
-        setImageFile(null);
-        setImagePreview(null);
-        setImageUrl("");
-        fetch(`http://localhost:5000/api/News/GetYourPost?userid=${userId}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${tokenSend}`,
-          },
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.statusCode === 1 && data.data) {
-              setMyPosts(data.data);
-            }
-          })
-          .catch((error) => console.error("Error fetching your posts:", error));
-
+        // Reset form và đóng dialog
+        resetForm();
+        setIsOpen(false);
+        
+        // Hiển thị thông báo thành công
+        toast({
+          title: "Đăng bài viết thành công",
+          description: "Bài viết của bạn đã được tạo và đang chờ duyệt",
+          duration: 3000
+        });
+        
+        // Cập nhật danh sách bài viết
+        fetchUserPosts();
+      } else {
+        // Hiển thị thông báo lỗi
+        toast({
+          title: "Lỗi đăng bài viết",
+          description: result.message || "Đã xảy ra lỗi khi đăng bài viết",
+          variant: "destructive",
+          duration: 3000
+        });
       }
-      console.log("Create post result:", result);
-
-      // Xử lý sau khi tạo bài viết thành công: thông báo, reset form, đóng dialog, v.v.
     } catch (error) {
-      console.error("Error creating post:", error);
+      console.error("Lỗi khi đăng bài viết:", error);
+      toast({
+        title: "Lỗi đăng bài viết",
+        description: "Đã xảy ra lỗi khi gửi bài viết",
+        variant: "destructive",
+        duration: 3000
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  // Format date
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("vi-VN", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
 
   return (
     <div>
-      {/* Phần header */}
+      {/* Header và nút tạo bài viết */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Your Posts</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Bài Viết Của Tôi</h1>
+          <p className="text-gray-500 mt-1">Quản lý và tạo nội dung mới</p>
+        </div>
 
-        {/* Nút mở form tạo bài viết mới */}
-        <Dialog>
+        {/* Nút tạo bài viết mới */}
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button className="px-6 py-2 bg-yellow-700 text-white rounded-lg hover:bg-yellow-800 transition-colors">
-              Create new post
+            <Button className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Đăng bài viết mới
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Tạo bài viết mới</DialogTitle>
-              <DialogDescription>
-                Nhập thông tin bài viết bên dưới.
-              </DialogDescription>
-            </DialogHeader>
-            {/* Form thêm bài viết */}
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="head"
-                >
-                  Head
-                </label>
-                <input
-                  type="text"
-                  id="head"
-                  name="head"
-                  value={head}
-                  onChange={(e) => setHead(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                />
-              </div>
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="title"
-                >
-                  Title
-                </label>
-                <input
-                  type="text"
-                  id="title"
-                  name="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                />
-              </div>
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="content"
-                >
-                  Content
-                </label>
-                <textarea
-                  id="content"
-                  name="content"
-                  rows={4}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                />
-              </div>
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="timeReading"
-                >
-                  Time reading
-                </label>
-                <input
-                  type="number"
-                  id="timeReading"
-                  name="timeReading"
-                  value={timeReading}
-                  onChange={(e) => setTimeReading(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                />
-              </div>
-              {/* Dropdown chọn danh mục */}
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="category"
-                >
-                  Category
-                </label>
-                <select
-                  id="category"
-                  name="category"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                >
-                  <option value="">Select a category</option>
-                  {categories.map((cat) => (
-                    <option key={cat.categoryId} value={cat.categoryId}>
-                      {cat.categoryName}
-                    </option>
-                  ))}
-                </select>
-
-              </div>
-              {/* Dropdown chọn danh mục con*/}
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="category"
-                >
-                  Children Category
-                </label>
-                <select
-                  id="childrenCategory"
-                  name="childrenCategory"
-                  value={selectedChildrenCategory}
-                  onChange={(e) => setSelectedChilrenCategory(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                >
-                  <option value="">Select a children category</option>
-                  {childrenCategories.map((cat) => (
-                    <option key={cat.childrenCategoryID} value={cat.childrenCategoryID}>
-                      {cat.childrenCategoryName}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {/* Ô chọn ảnh */}
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="image"
-                >
-                  Image
-                </label>
-                <input
-                  type="file"
-                  id="image"
-                  name="image"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                />
-                {imagePreview && (
-                  <div className="mt-2">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-32 h-32 object-cover rounded"
-                    />
+          <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden p-0">
+            <ScrollArea className="max-h-[calc(90vh-4rem)]">
+              <div className="p-6">
+                <DialogHeader className="mb-6">
+                  <DialogTitle className="text-2xl font-bold text-emerald-600 flex items-center">
+                    <Pencil className="w-5 h-5 mr-2" />
+                    Đăng bài viết mới
+                  </DialogTitle>
+                  <DialogDescription>
+                    Điền đầy đủ thông tin để Đăng bài viết mới. Các trường có dấu * là bắt buộc.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                {/* Form thêm bài viết */}
+                <form onSubmit={handleSubmit}>
+                  <div className="space-y-5">
+                    {/* Tiêu đề bài viết */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700" htmlFor="head">
+                        Tiêu đề bài viết <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="head"
+                        name="head"
+                        value={head}
+                        onChange={(e) => setHead(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                        placeholder="Nhập tiêu đề bài viết"
+                      />
+                    </div>
+                    
+                    {/* Mô tả ngắn */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700" htmlFor="title">
+                        Mô tả ngắn <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="title"
+                        name="title"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                        placeholder="Nhập mô tả ngắn"
+                      />
+                    </div>
+                    
+                    {/* Nội dung bài viết */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700" htmlFor="content">
+                        Nội dung <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        id="content"
+                        name="content"
+                        rows={6}
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                        placeholder="Nhập nội dung bài viết"
+                      />
+                    </div>
+                    
+                    {/* Thời gian đọc */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700" htmlFor="timeReading">
+                        Thời gian đọc (phút) <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="timeReading"
+                        name="timeReading"
+                        min="1"
+                        value={timeReading}
+                        onChange={(e) => setTimeReading(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                        placeholder="Nhập thời gian đọc"
+                      />
+                    </div>
+                    
+                    {/* Danh mục */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700" htmlFor="category">
+                          Danh mục <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          id="category"
+                          name="category"
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                        >
+                          <option value="">Chọn danh mục</option>
+                          {categories.map((cat) => (
+                            <option key={cat.categoryId} value={cat.categoryId}>
+                              {cat.categoryName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Danh mục con */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700" htmlFor="childrenCategory">
+                          Danh mục con <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          id="childrenCategory"
+                          name="childrenCategory"
+                          value={selectedChildrenCategory}
+                          onChange={(e) => setSelectedChilrenCategory(e.target.value)}
+                          className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                          disabled={!selectedCategory}
+                        >
+                          <option value="">Chọn danh mục con</option>
+                          {childrenCategories.map((cat) => (
+                            <option key={cat.childrenCategoryID} value={cat.childrenCategoryID}>
+                              {cat.childrenCategoryName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    
+                    {/* Ảnh đại diện */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700" htmlFor="image">
+                        Ảnh bìa <span className="text-red-500">*</span>
+                      </label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-emerald-500 transition-all">
+                        <input
+                          type="file"
+                          id="image"
+                          name="image"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                        />
+                        <label htmlFor="image" className="cursor-pointer block">
+                          {imagePreview ? (
+                            <div className="space-y-3">
+                              <img
+                                src={imagePreview}
+                                alt="Preview"
+                                className="max-h-40 mx-auto object-cover rounded-lg"
+                              />
+                              <p className="text-sm text-emerald-600">Nhấp để thay đổi ảnh</p>
+                            </div>
+                          ) : (
+                            <div className="py-4">
+                              <Plus className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                              <p className="text-gray-500">Nhấp để tải ảnh lên</p>
+                              <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (tối đa 2MB)</p>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                    </div>
                   </div>
-                )}
+                  
+                  <div className="flex justify-end space-x-4 mt-8">
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        Hủy
+                      </Button>
+                    </DialogClose>
+                    <Button 
+                      type="submit" 
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Đang tạo...
+                        </>
+                      ) : (
+                        <>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Tạo bài viết
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
               </div>
-              <div className="mb-4">
-                <label
-                  className="block text-sm font-medium mb-1"
-                  htmlFor="footer"
-                >
-                  Footer
-                </label>
-                <input
-                  type="text"
-                  id="footer"
-                  name="footer"
-                  value={footer}
-                  onChange={(e) => setFooter(e.target.value)}
-                  className="border border-gray-300 rounded w-full py-2 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-700"
-                />
-              </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="secondary">
-                    Close
-                  </Button>
-                </DialogClose>
-                <Button type="submit" className="bg-yellow-700 hover:bg-yellow-800">
-                  Save
-                </Button>
-              </DialogFooter>
-            </form>
+            </ScrollArea>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Nội dung chính trang Contributor */}
-      {myPosts.length === 0 ? (
-        <p className="text-gray-500">No contributions yet.</p>
-      ) : (<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {myPosts.map((post) => (
-          <Link href={`/news/${post.newsID}`} key={post.newsID}>
-            <div
-
-              className="border border-gray-200 rounded-lg p-4 shadow-sm"
-            >
-              <div className="w-full h-40 overflow-hidden rounded mb-3">
-                <img
-                  src={post.imagesLink || "/placeholder/400/1.jpg"}
-                  alt={post.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              {/* Thông tin tác giả, ngày tạo, v.v. */}
-              <div className="flex items-center text-sm text-gray-500 mb-2">
-                <span className="font-semibold mr-2">
-                  {user.user?.fullname || "You"}
-                </span>
-                <span className="text-xs">
-                  •{" "}
-                  {new Date(post.createdDate).toLocaleDateString("vi-VN", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </span>
-              </div>
-              {/* Tiêu đề, header, v.v. */}
-              <h2 className="text-lg font-bold mb-1">{post.title.slice(0, 50) + "..."}</h2>
-              <p className="text-sm text-gray-700 line-clamp-2">
-                {post.header.slice(0, 50) + "..."}
-              </p>
-              <div className="flex items-center mt-2 text-gray-500 text-xs">
-                <span>{post.timeReading} min read</span>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
-
+      {/* Hiển thị bài viết */}
+      {loadingPosts ? (
+        <div className="flex justify-center items-center py-16">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+          <span className="ml-3 text-gray-600">Đang tải bài viết...</span>
+        </div>
+      ) : myPosts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-gray-50 rounded-xl p-8">
+          <div className="w-20 h-20 mb-6 bg-emerald-50 rounded-full flex items-center justify-center">
+            <FileText className="w-10 h-10 text-emerald-500/40" strokeWidth={1.5} />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-800 mb-2">Chưa có bài viết nào</h3>
+          <p className="text-gray-600 mb-6 max-w-md">Hãy bắt đầu chia sẻ kiến thức của bạn bằng cách đăng bài viết đầu tiên</p>
+          <Button 
+            onClick={() => setIsOpen(true)}
+            className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center"
+          >
+            <Pencil className="w-4 h-4 mr-2" />
+            Đăng bài viết đầu tiên
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+              <FileText className="w-5 h-5 mr-2 text-emerald-600" />
+              Bài viết của tôi ({myPosts.length})
+            </h2>
+            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+              <Info className="w-3 h-3 mr-1" />
+              Bài viết sẽ hiển thị sau khi được quản trị viên duyệt
+            </Badge>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {myPosts.map((post) => (
+              <Link href={`/news/${post.newsID}`} key={post.newsID} className="group">
+                <div className="border border-gray-200 hover:border-emerald-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
+                  {/* Ảnh bài viết */}
+                  <div className="w-full h-48 overflow-hidden relative">
+                    <img
+                      src={post.imagesLink || "/placeholder/400/250.jpg"}
+                      alt={post.header}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent py-2 px-4">
+                      <div className="flex items-center gap-1 text-white text-xs">
+                        <Calendar className="w-3 h-3" />
+                        <span>{formatDate(post.createdDate)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Nội dung */}
+                  <div className="p-4 flex-1 flex flex-col">
+                    <h3 className="text-lg font-semibold mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                      {post.header}
+                    </h3>
+                    <p className="text-gray-600 text-sm line-clamp-3 mb-4 flex-1">{post.title}</p>
+                    
+                    {/* Footer */}
+                    <div className="flex items-center justify-between mt-auto border-t border-gray-100 pt-3">
+                      <div className="flex items-center text-xs text-gray-500">
+                        <div className="flex items-center">
+                          <BookOpen className="w-3 h-3 mr-1" />
+                          <span>{post.timeReading} phút đọc</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Avatar className="w-6 h-6">
+                          <AvatarImage src={user?.avatar || "/placeholder/24/24"} alt={user?.fullname} />
+                          <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                            {user?.fullname.charAt(0) || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs text-gray-500">Bạn</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
