@@ -1,7 +1,6 @@
 "use client"
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, X } from 'lucide-react';
-import { Settings } from 'lucide-react';
+import { Search, X, Settings, Pencil, LogOut, Shield, Bookmark, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname, useRouter } from 'next/navigation';
@@ -19,6 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import Image from "next/image";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 
 // ====================================
 // TYPE DEFINITIONS
@@ -52,18 +52,19 @@ export const HeaderCrypto = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { user: initialUser } = useUser();
+  const { user: authUser, token, logout } = useAuth();
 
   // ------------------------------------
   // STATE MANAGEMENT
   // ------------------------------------
   
   // User state
-  const [user, setUser] = useState(initialUser);
+  const [user, setUser] = useState(authUser || initialUser);
   
   // Categories state
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   // Search state
@@ -246,16 +247,17 @@ export const HeaderCrypto = () => {
   
   // Handle user sign out
   const handleSignOut = () => {
-    const user = sessionStorage.getItem("user");
-    const token = sessionStorage.getItem("token");
+    const storedUser = sessionStorage.getItem("user");
+    const storedToken = sessionStorage.getItem("token");
 
-    if (user || token) {
+    if (storedUser || storedToken) {
       // Clear session storage
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("token");
       
       // Update state and redirect
       setUser(null);
+      if (logout) logout();
       router.push("/User/Login");
     } else {
       router.push("/User/Login");
@@ -281,7 +283,7 @@ export const HeaderCrypto = () => {
           <div className="flex items-center flex-1 gap-8">
             
             {/* Logo - Image only, link to home */}
-                 <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="relative">
                 <div className="w-12 h-12 bg-emerald-500 rounded-lg flex items-center justify-center">
                   <span className="text-white text-3xl font-bold">₿</span>
@@ -367,7 +369,7 @@ export const HeaderCrypto = () => {
                 <DropdownMenuTrigger asChild>
                   <Avatar className="cursor-pointer">
                     <AvatarImage src={user.avatar || "/default-avatar.png"} alt={user.fullname} />
-                    <AvatarFallback>{user.fullname.charAt(0)}</AvatarFallback>
+                    <AvatarFallback>{user.fullname?.charAt(0) || "U"}</AvatarFallback>
                   </Avatar>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56">
@@ -381,17 +383,36 @@ export const HeaderCrypto = () => {
                   <DropdownMenuSeparator />
                   
                   {/* User Actions */}
-                  <DropdownMenuItem onClick={handleSaved}>
-                    Saved
+
+                  <DropdownMenuItem onClick={() => router.push("/profle/edit")}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Chỉnh sửa thông tin
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleAdmin}>
-                    Admin
+                  <DropdownMenuItem onClick={() => router.push("/profle/saved")}>
+                    <Bookmark className="mr-2 h-4 w-4" />
+                    Bài viết đã lưu
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/profle/contributor")}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Bài viết của tôi
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   
+                  {/* Admin Panel - chỉ hiển thị nếu là admin (roleId === 1) */}
+                  {user.roleId === 1 && (
+                    <>
+                      <DropdownMenuItem onClick={handleAdmin}>
+                        <Shield className="mr-2 h-4 w-4" />
+                        Quản trị hệ thống
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  
                   {/* Sign Out */}
                   <DropdownMenuItem onClick={handleSignOut} className="text-red-600">
-                    Sign out
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Đăng xuất
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

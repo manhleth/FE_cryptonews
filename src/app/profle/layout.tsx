@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default function ProfileLayout({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [bio, setBio] = useState("Thêm tiểu sử ngắn của bạn");
+  const [bio, setBio] = useState("");
   const pathname = usePathname();
   const router = useRouter();
 
