@@ -54,15 +54,14 @@ export default function Home() {
                 Khám phá thế giới tiền điện tử với những thông tin mới nhất và khóa học chuyên sâu
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button size="default" className="bg-white text-emerald-600 hover:bg-gray-50 px-6 py-2 rounded-full font-semibold">
-                  Khám phá ngay
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-              <Button size="default" className="bg-white text-emerald-600 hover:bg-emerald-600 hover:text-white px-6 py-2 rounded-full font-semibold transition-all duration-300">
-                   Xem khóa học
-               </Button>
-              </div>
+            <div className="flex justify-center">
+                  <a href="http://localhost:3000/category/4">
+                    <Button size="default" className="bg-white text-emerald-600 hover:bg-gray-50 px-6 py-2 rounded-full font-semibold flex items-center">
+                      KIẾN THỨC
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </a>
+            </div>
           </div>
         </div>
       </section>
@@ -132,10 +131,10 @@ export default function Home() {
                 </ScrollableSection>
               </section>
 
-              {/* Trending */}
+              {/* Kienthuc */}
               <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
                 <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-bold text-gray-900">Xu hướng</h2>
+                  <h2 className="text-3xl font-bold text-gray-900">Kiến thức</h2>
                   <div className="flex items-center text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium group">
                     <span>Xem tất cả</span>
                     <ChevronRight className="ml-1 h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -153,7 +152,7 @@ export default function Home() {
               {/* Courses Section */}
               <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
                 <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-bold text-gray-900">Khóa học nổi bật</h2>
+                  <h2 className="text-3xl font-bold text-gray-900">Phân tích thị trường</h2>
                   <div className="flex items-center text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium group">
                     <span>Xem tất cả</span>
                     <ChevronRight className="ml-1 h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -167,7 +166,23 @@ export default function Home() {
                   ))}
                 </ScrollableSection>
               </section>
-
+              {/* Airdrop */}
+              <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-3xl font-bold text-gray-900">Airdrop & Retroactive</h2>
+                  <div className="flex items-center text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium group">
+                    <span>Xem tất cả</span>
+                    <ChevronRight className="ml-1 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+                <ScrollableSection title="">
+                  {newsData.map((item: any, index: number) => (
+                    <div key={item.newsID || index} className="transform transition-all duration-300 hover:scale-105">
+                      <NewsCard item={item} />
+                    </div>
+                  ))}
+                </ScrollableSection>
+              </section>
               {/* Newsletter Signup */}
               <section className="relative py-16 px-8 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-emerald-600/20 to-teal-700/20"></div>

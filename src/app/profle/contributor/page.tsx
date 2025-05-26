@@ -36,7 +36,6 @@ interface ChildrenCategory {
   childrenCategoryID: number;
 }
 
-
 interface Post {
   newsID: number;
   header: string;
@@ -57,7 +56,7 @@ export default function ContributorPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [timeReading, setTimeReading] = useState("");
-  const [footer, setFooter] = useState("");
+  const [footer, setFooter] = useState(""); // Đảm bảo có state footer
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedChildrenCategory, setSelectedChilrenCategory] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -157,7 +156,7 @@ export default function ContributorPage() {
     setTitle("");
     setContent("");
     setTimeReading("");
-    setFooter("");
+    setFooter(""); // Reset footer
     setSelectedCategory("");
     setSelectedChilrenCategory("");
     setImageFile(null);
@@ -170,8 +169,8 @@ export default function ContributorPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Validate form
-    if (!head.trim() || !title.trim() || !content.trim() || !timeReading || !selectedCategory || !selectedChildrenCategory) {
+    // Validate form - Thêm kiểm tra footer
+    if (!head.trim() || !title.trim() || !content.trim() || !timeReading || !footer.trim() || !selectedCategory || !selectedChildrenCategory) {
       toast({
         title: "Vui lòng điền đầy đủ thông tin",
         description: "Hãy kiểm tra lại các trường bắt buộc",
@@ -224,7 +223,7 @@ export default function ContributorPage() {
     formData.append("title", title);
     formData.append("content", content);
     formData.append("timeReading", timeReading);
-    formData.append("footer", footer);
+    formData.append("footer", footer); // Đảm bảo footer được thêm vào
     formData.append("categoryId", selectedCategory);
     formData.append("userId", userId!.toString());
     formData.append("childrenCategoryId", selectedChildrenCategory);
@@ -385,6 +384,22 @@ export default function ContributorPage() {
                         onChange={(e) => setTimeReading(e.target.value)}
                         className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
                         placeholder="Nhập thời gian đọc"
+                      />
+                    </div>
+
+                    {/* Footer/Kết luận */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700" htmlFor="footer">
+                        Kết luận <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        id="footer"
+                        name="footer"
+                        rows={3}
+                        value={footer}
+                        onChange={(e) => setFooter(e.target.value)}
+                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                        placeholder="Nhập kết luận cho bài viết"
                       />
                     </div>
                     

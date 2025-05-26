@@ -2,25 +2,23 @@
 "use client"
 import { notFound } from "next/navigation";
 import { mockNews } from "@/data/mockData";
-import { FooterCrypto } from "@/components/sections/news/FooterCrypto";
-import { Share2, BookmarkIcon } from "lucide-react";
+import { Share2, BookmarkIcon, Clock, User, Calendar } from "lucide-react";
 import { use, useEffect, useState } from "react";
-import { promises } from "dns";
 import { useAuth } from "@/context/AuthContext";
 import CommentSection from "@/components/Comments";
 
 interface NewsDetailPageProps {
-  params: { id: string } | Promise<{ id: string }>;
+  params: Promise<{ id: string }> | { id: string };
 }
-interface newsData
-{
+
+interface NewsData {
   header: string;
-  title:string;
-  content:string;
+  title: string;
+  content: string;
   footer: string;
   timeReading: number;
   userName: string;
-  avatar:string;
+  avatar: string;
   categoryId: number;
   imagesLink: string;
 }
@@ -34,134 +32,175 @@ interface Comment {
 }
 
 export default function NewsDetailPage({ params }: NewsDetailPageProps) {
-  const resolvedParams = params instanceof Promise ? params : Promise.resolve(params);
-  const { id } = use(resolvedParams);
-  const token = useAuth();
-  const [item, setItem] = useState<newsData | null>(null);
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { id } = resolvedParams;
+  const { token } = useAuth();
+  const [item, setItem] = useState<NewsData | null>(null);
   const [isSaved, setIsSaved] = useState(false);
-
   const [comments, setComments] = useState<Comment[]>([]);
-  const [visibleCount, setVisibleCount] = useState(5); // hiển thị 5 comment đầu
+  const [visibleCount, setVisibleCount] = useState(5);
   const [newComment, setNewComment] = useState("");
- const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
- useEffect(() => {
-  console.log("Giá trị isSaved sau khi cập nhật:", isSaved);
-}, [isSaved]);
+  // Fetch news data
   useEffect(() => {
-    if (!token || !token.token) return;
-    const item = fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token.token}`
-      }
-    }
-    ).then((res) => {
-      if(!res.ok)
-        throw new Error(`Http error! status: ${res.status}`);
-      return res.json();
-    }).then((data) => {
-      console.log(data.data);
-      setItem(data.data);
-    }).catch((err) => console.log(err));
-  }, [token, id])
-
-  const handleSubmitComment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-    fetch(`http://localhost:5000/api/Comments/AddComment`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token.token}`,
-      },
-      body: JSON.stringify({
-        newsId: id,
-        content: newComment,
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        // Giả sử API trả về comment mới trong data.data
-        setComments((prev) => [data.data, ...prev]);
-        setNewComment("");
-        setVisibleCount((prev) => prev + 1);
-      })
-      .catch((err) => console.log(err));
-  };
-useEffect(() => {
-  const tokenSend = token.token;
-    const fetchSavedNews = async () => {
+    if (!token) return;
+    
+    const fetchNewsData = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/Saved/GetYourListSaved', {
-          headers: {
-            Authorization: `Bearer ${tokenSend}`
+        setIsInitialLoading(true);
+        const response = await fetch(
+          `http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`,
+          {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
           }
-        }).then((data) => data.json()).then((data) => {
-        if (data) {
-          // Lấy danh sách newsID từ dữ liệu trả về
-          console.log("Danh sách từ detail: ");
-          console.log(data);
-          const savedNewsIds = data.data.map((saved: any) => saved.newsId);
-          console.log("Danh sách saveds id");
-          console.log(savedNewsIds);
-          
-          setIsSaved(savedNewsIds.includes(Number(id)));
-          console.log(isSaved);
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-        });
-        
+
+        const data = await response.json();
+        console.log(data.data);
+        setItem(data.data);
       } catch (error) {
-        // console.error("Error fetching saved news:", error);
+        console.error("Error fetching news:", error);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
 
-    if (token) {
-      fetchSavedNews();
-    }
+    fetchNewsData();
   }, [token, id]);
+
+  // Fetch saved status
   useEffect(() => {
-    if (!token || !token.token) return;
-    fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
-      headers: {
-        Authorization: `Bearer ${token.token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        // Giả sử API trả về { data: Comment[] }
-        setComments(data.data);
-      })
-      .catch((err) => console.log(err));
-  }, [token, id]); useEffect(() => {
-    if (!token || !token.token) return;
-    fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
-      headers: {
-        Authorization: `Bearer ${token.token}`,
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        // Giả sử API trả về { data: Comment[] }
-        setComments(data.data);
-      })
-      .catch((err) => console.log(err));
+    if (!token) return;
+
+    const fetchSavedNews = async () => {
+      try {
+        const response = await fetch(
+          'http://localhost:5000/api/Saved/GetYourListSaved',
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data && data.data) {
+          console.log("Danh sách từ detail: ", data);
+          const savedNewsIds = data.data.map((saved: any) => saved.newsId);
+          console.log("Danh sách saved ids: ", savedNewsIds);
+          
+          const isCurrentNewsSaved = savedNewsIds.includes(Number(id));
+          setIsSaved(isCurrentNewsSaved);
+          console.log("Is saved:", isCurrentNewsSaved);
+        }
+      } catch (error) {
+        console.error("Error fetching saved news:", error);
+      }
+    };
+
+    fetchSavedNews();
   }, [token, id]);
-const handleBookmarkClick = async (e: React.MouseEvent) => {
-    // Ngăn chặn sự kiện click lan ra ngoài (để không trigger Link)
+
+  // Fetch comments
+  useEffect(() => {
+    if (!token) return;
+
+    const fetchComments = async () => {
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setComments(data.data || []);
+      } catch (error) {
+        console.error("Error fetching comments:", error);
+      }
+    };
+
+    fetchComments();
+  }, [token, id]);
+
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || !token) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `http://localhost:5000/api/Comments/AddComment`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            newsId: id,
+            content: newComment,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setComments((prev) => [data.data, ...prev]);
+      setNewComment("");
+      setVisibleCount((prev) => prev + 1);
+    } catch (error) {
+      console.error("Error adding comment:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBookmarkClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
+    if (!token) return;
+
     try {
+      setLoading(true);
       console.log("Gửi lưu bài viết: " + id);
-      const response = await fetch(`http://localhost:5000/api/Saved/AddOrRemoveSaved?newsID=${id}`, {
-        method: 'POST', // Hoặc thay thành GET nếu API của bạn yêu cầu
-        headers: {
-          Authorization: `Bearer ${token.token}`
+      
+      const response = await fetch(
+        `http://localhost:5000/api/Saved/AddOrRemoveSaved?newsID=${id}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
-      });
+      );
+
       if (response.ok) {
-        // Toggle trạng thái bookmark
         setIsSaved(prev => !prev);
       } else {
         console.error("Failed to toggle bookmark");
@@ -169,107 +208,216 @@ const handleBookmarkClick = async (e: React.MouseEvent) => {
     } catch (error) {
       console.error("Error toggling bookmark:", error);
     } finally {
+      setLoading(false);
     }
   };
-  // Nếu không tìm thấy bài viết thì trả về notFound
-  if (!item) {
-    return <div>Vui lòng đăng nhập để xem chi tiết bài viết</div>;
-  }
-  const displayedComments = comments.slice(0, visibleCount);
-  return (
-    
-    <div className="max-w-4xl mx-auto p-4 space-y-8">
-      {/* Phần header của bài viết */}
-      <header className="border-b pb-4">
-        <h1 className="text-2xl md:text-3xl font-bold mb-2">
-          {item.title}
-        </h1>
 
-        {/* Thông tin tác giả, thời gian */}
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-        <img src={item.avatar || "/placeholder/24/24.jpg"} alt={item.userName} className="w-6 h-6 rounded-full" />
-          <span>{item.userName}</span>
-          <span>•</span>
-          <span>{item.timeReading+" minute"}</span>
-        </div>
-      </header>
+  const handleShare = async () => {
+    const link = window.location.href;
+    try {
+      await navigator.clipboard.writeText(link);
+      // You can replace this with a toast notification
+      alert("Đã sao chép liên kết bài viết!");
+    } catch (error) {
+      console.error("Failed to copy link:", error);
+    }
+  };
 
-      {/* Nội dung chính của bài viết */}
-      <article className="space-y-4 leading-relaxed">
-        {/* Ảnh minh họa bài viết nếu cần */}
-        <img
-          src={item.imagesLink || "/placeholder/400/250.jpg"}
-          alt={item.title}
-          className="w-full h-auto object-cover rounded-md"
-        />
-
-        {/* Đoạn text mô phỏng */}
-        <p>{item.content}</p>
-      </article>
-
-      {/* Nút share, bookmark... (nếu muốn) */}
-      <div className="flex items-center gap-4">
-      <button
-        onClick={() => {
-          const link = window.location.href;
-          navigator.clipboard.writeText(link);
-          alert("Đã sao chép liên kết bài viết!");
-              }}
-          className="flex items-center gap-1 px-3 py-2 rounded-md hover:bg-gray-100">
-          <Share2 size={20} />
-            Share
-          </button>
-          {/* flex items-center gap-1 px-3 py-2 rounded-md hover:bg-gray-100 text-gray-600 */}
-          <button
-                onClick={handleBookmarkClick}
-                className="cursor-pointer"
-                aria-label="Toggle Bookmark"
-                disabled={loading}
-              >
-                <BookmarkIcon
-                  size={20}
-                  className={`${isSaved ? 'fill-black text-black' : 'text-gray-600'}`}
-                />Bookmark
-              </button>
-      </div>
-
-       <CommentSection newsId={Number(id)}/>
-
-      {/* Footer của bài viết - Related Posts */}
-      <section className="border-t pt-4">
-        <h2 className="text-xl font-semibold mb-4">Related Posts</h2>
-        {/* Render các bài viết liên quan, có thể là mockNews hoặc API */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {mockNews.slice(0, 4).map((related) => (
-            <div key={related.id} className="border rounded-md p-3 space-y-2">
-              <img
-                src={related.image}
-                alt={related.title}
-                className="w-full h-32 object-cover rounded-md"
-              />
-              <div className="text-sm text-gray-500 flex items-center gap-1">
-                <img
-                  src="/api/placeholder/24/24"
-                  alt={related.author}
-                  className="w-5 h-5 rounded-full"
-                />
-                <span>{related.author}</span>
-                <span>•</span>
-                <span>{related.timeAgo}</span>
-              </div>
-              <h3 className="font-semibold text-base line-clamp-2">
-                {related.title}
-              </h3>
-              <p className="text-sm text-gray-600 line-clamp-2">
-                {related.excerpt}
-              </p>
+  // Loading state with skeleton
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white">
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="animate-pulse space-y-6">
+            <div className="space-y-4">
+              <div className="h-8 bg-emerald-100 rounded-lg w-3/4"></div>
+              <div className="h-4 bg-emerald-100 rounded w-1/2"></div>
             </div>
-          ))}
+            <div className="h-64 bg-emerald-100 rounded-xl"></div>
+            <div className="space-y-3">
+              <div className="h-4 bg-emerald-100 rounded w-full"></div>
+              <div className="h-4 bg-emerald-100 rounded w-5/6"></div>
+              <div className="h-4 bg-emerald-100 rounded w-4/5"></div>
+            </div>
+          </div>
         </div>
-      </section>
+      </div>
+    );
+  }
 
-      {/* Footer toàn trang (nếu muốn dùng) */}
-      <FooterCrypto />
+  // No token state
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex items-center justify-center">
+        <div className="text-center py-12 px-6">
+          <div className="w-24 h-24 mx-auto mb-6 bg-emerald-100 rounded-full flex items-center justify-center">
+            <User className="w-12 h-12 text-emerald-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            Đăng nhập để tiếp tục
+          </h2>
+          <p className="text-gray-600">
+            Vui lòng đăng nhập để xem chi tiết bài viết
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // No item found
+  if (!item) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex items-center justify-center">
+        <div className="text-center py-12 px-6">
+          <div className="w-24 h-24 mx-auto mb-6 bg-red-100 rounded-full flex items-center justify-center">
+            <span className="text-3xl">📄</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            Không tìm thấy bài viết
+          </h2>
+          <p className="text-gray-600">
+            Bài viết bạn đang tìm kiếm không tồn tại hoặc đã bị xóa
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white">
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <article className="bg-white rounded-2xl shadow-lg overflow-hidden border border-emerald-100">
+          {/* Hero Image */}
+          <div className="aspect-video relative overflow-hidden">
+            <img
+              src={item.imagesLink || "/placeholder/800/400.jpg"}
+              alt={item.title}
+              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+          </div>
+
+          <div className="p-8">
+            {/* Header */}
+            <header className="mb-8">
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6 leading-tight">
+                {item.title}
+              </h1>
+
+              {/* Author Info */}
+              <div className="flex items-center gap-4 mb-6">
+                <img 
+                  src={item.avatar || "/placeholder/48/48.jpg"} 
+                  alt={item.userName} 
+                  className="w-12 h-12 rounded-full border-2 border-white shadow-md" 
+                />
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">{item.userName}</p>
+                  <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      <span>{item.timeReading} phút đọc</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      <span>Hôm nay</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-4 border-t border-emerald-100">
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors duration-200 font-medium"
+                >
+                  <Share2 className="w-4 h-4" />
+                  Chia sẻ
+                </button>
+
+                <button
+                  onClick={handleBookmarkClick}
+                  disabled={loading}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+                    isSaved 
+                      ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-md' 
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <BookmarkIcon
+                    className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`}
+                  />
+                  {isSaved ? 'Đã lưu' : 'Lưu bài'}
+                </button>
+              </div>
+            </header>
+
+            {/* Content */}
+            <div className="prose prose-lg max-w-none mb-12">
+              <div className="text-gray-700 leading-relaxed text-lg">
+                {item.content.split('\n').map((paragraph, index) => (
+                  <p key={index} className="mb-4">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
+            </div>
+
+            {/* Comments Section */}
+            <div className="border-t border-emerald-100 pt-8">
+              <CommentSection newsId={Number(id)} />
+            </div>
+          </div>
+        </article>
+
+        {/* Related Posts */}
+        <section className="mt-12">
+          <div className="bg-white rounded-2xl shadow-lg p-8 border border-emerald-100">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <span className="w-1 h-6 bg-emerald-600 rounded-full"></span>
+              Bài viết liên quan
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+              {mockNews.slice(0, 4).map((related) => (
+                <div key={related.id} className="group cursor-pointer">
+                  <div className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-all duration-300">
+                    <div className="aspect-video relative overflow-hidden">
+                      <img
+                        src={related.image}
+                        alt={related.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                    
+                    <div className="p-4">
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                        <img
+                          src="/api/placeholder/20/20"
+                          alt={related.author}
+                          className="w-5 h-5 rounded-full"
+                        />
+                        <span>{related.author}</span>
+                        <span>•</span>
+                        <span>{related.timeAgo}</span>
+                      </div>
+                      
+                      <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                        {related.title}
+                      </h3>
+                      
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {related.excerpt}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
