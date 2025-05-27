@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Users, 
   FileText, 
@@ -9,11 +10,22 @@ import {
   MessageCircle, 
   LayoutDashboard,
   Menu,
-  X
+  X,
+  LogOut
 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
+
+  // Check if admin token exists on mount
+  useEffect(() => {
+    const adminToken = localStorage.getItem("tokenAdmin");
+    if (!adminToken) {
+      // Redirect to admin login if no token found
+      router.push("/admin/login");
+    }
+  }, [router]);
 
   const menuItems = [
     {
@@ -37,6 +49,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       label: "Quản lý bình luận"
     }
   ];
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem("tokenAdmin");
+    router.push("/admin/login");
+  };
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -95,7 +112,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Footer */}
         <div className="absolute bottom-4 left-4 right-4">
           <div className="p-4 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 text-center">
+            <button 
+              onClick={handleAdminLogout}
+              className="w-full flex items-center justify-center space-x-2 text-red-600 py-2 hover:bg-red-50 rounded-md transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="text-sm">Đăng xuất</span>
+            </button>
+            <p className="text-xs text-gray-500 text-center mt-3">
               Admin Dashboard v1.0
             </p>
           </div>

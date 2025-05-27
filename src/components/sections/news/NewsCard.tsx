@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { BookmarkIcon, Clock, Share2, Eye } from 'lucide-react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from "@/context/AuthContext"
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -26,9 +26,13 @@ interface NewsCardProps {
 }
 
 export const NewsCard = ({ item }: NewsCardProps) => {
+  const router = useRouter();
   const { token } = useAuth();
   const [isSaved, setIsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Debug log
+  console.log("NewsCard rendered with item:", item);
 
   useEffect(() => {
     const fetchSavedNews = async () => {
@@ -53,9 +57,23 @@ export const NewsCard = ({ item }: NewsCardProps) => {
     }
   }, [token, item.newsID]);
 
+  const handleCardClick = () => {
+    console.log("Card clicked!");
+    console.log("Navigating to:", `/news/${item.newsID}`);
+    console.log("Item newsID:", item.newsID);
+    
+    // Sử dụng router.push để điều hướng
+    router.push(`/news/${item.newsID}`);
+  };
+
   const handleBookmarkClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!token) {
+      console.log("No token for bookmark");
+      return;
+    }
 
     try {
       setLoading(true);
@@ -77,73 +95,96 @@ export const NewsCard = ({ item }: NewsCardProps) => {
     }
   };
 
+  const handleShareClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Logic chia sẻ ở đây
+    const url = `${window.location.origin}/news/${item.newsID}`;
+    if (navigator.share) {
+      navigator.share({
+        title: item.header,
+        text: item.title,
+        url: url,
+      });
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(url);
+      console.log("URL copied to clipboard");
+    }
+  };
+
   return (
-    <Link href={`/news/${item.newsID}`}>
-      <Card className="min-w-[300px] md:min-w-[350px] flex-none group hover:shadow-lg transition-all duration-300 bg-white border border-gray-200 hover:border-emerald-200 overflow-hidden rounded-xl">
-        <div className="relative overflow-hidden">
-          <img
-            src={item.imagesLink || "/placeholder/400/250.jpg"}
-            alt={item.header}
-            className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          
-          {/* View count */}
-          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-700 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-            <Eye size={12} />
-            1.2k
+    <Card 
+      className="min-w-[300px] md:min-w-[350px] flex-none group hover:shadow-lg transition-all duration-300 bg-white border border-gray-200 hover:border-emerald-200 overflow-hidden rounded-xl cursor-pointer"
+      onClick={handleCardClick}
+    >
+      <div className="relative overflow-hidden">
+        <img
+          src={item.imagesLink || "/placeholder/400/250.jpg"}
+          alt={item.header}
+          className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        
+        {/* View count */}
+        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-700 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+          <Eye size={12} />
+          1.2k
+        </div>
+      </div>
+      
+      <CardContent className="p-6">
+        <div className="flex items-center gap-3 mb-3">
+          <Avatar className="w-8 h-8">
+            <AvatarImage src={item.userAvartar || "/api/placeholder/24/24"} alt="avatar" />
+            <AvatarFallback className="bg-emerald-100 text-emerald-700">
+              {item.userName?.charAt(0) || 'A'}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <span className="text-sm text-gray-700 font-medium">{item.userName}</span>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{item.timeAgo}</span>
+              <span>•</span>
+              <span>{item.timeReading} min read</span>
+            </div>
           </div>
         </div>
         
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3 mb-3">
-            <Avatar className="w-8 h-8">
-              <AvatarImage src={item.userAvartar || "/api/placeholder/24/24"} alt="avatar" />
-              <AvatarFallback className="bg-emerald-100 text-emerald-700">
-                {item.userName?.charAt(0) || 'A'}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <span className="text-sm text-gray-700 font-medium">{item.userName}</span>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span>{item.timeAgo}</span>
-                <span>•</span>
-                <span>{item.timeReading} min read</span>
-              </div>
-            </div>
+        <h3 className="font-bold text-lg mb-2 line-clamp-2 text-gray-900 group-hover:text-emerald-600 transition-colors">
+          {item.header}
+        </h3>
+        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+          {item.title}
+        </p>
+        
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Clock size={16} />
+            <span>{item.timeReading} min</span>
           </div>
-          
-          <h3 className="font-bold text-lg mb-2 line-clamp-2 text-gray-900 group-hover:text-emerald-600 transition-colors">
-            {item.header}
-          </h3>
-          <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-            {item.title}
-          </p>
-          
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Clock size={16} />
-              <span>{item.timeReading} min</span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleBookmarkClick}
-                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
-                aria-label="Toggle Bookmark"
-                disabled={loading}
-              >
-                <BookmarkIcon
-                  size={18}
-                  className={`${isSaved ? 'fill-emerald-500 text-emerald-500' : 'text-gray-400 hover:text-emerald-500'} transition-colors`}
-                />
-              </button>
-              <button className="p-2 rounded-full hover:bg-gray-100 transition-colors">
-                <Share2 size={18} className="text-gray-400 hover:text-emerald-500 transition-colors" />
-              </button>
-            </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleBookmarkClick}
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="Toggle Bookmark"
+              disabled={loading}
+            >
+              <BookmarkIcon
+                size={18}
+                className={`${isSaved ? 'fill-emerald-500 text-emerald-500' : 'text-gray-400 hover:text-emerald-500'} transition-colors`}
+              />
+            </button>
+            <button 
+              onClick={handleShareClick}
+              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <Share2 size={18} className="text-gray-400 hover:text-emerald-500 transition-colors" />
+            </button>
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 };

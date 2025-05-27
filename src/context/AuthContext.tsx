@@ -1,4 +1,3 @@
-
 "use client";
 import { createContext, useContext, useState, useEffect } from "react";
 
@@ -36,7 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(storedToken);
       if (storedUser) {
         try {
-          setUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+          
+          // If user is an admin, store token as adminToken as well
+          if (parsedUser.roleId === 1) {
+            localStorage.setItem("tokenAdmin", storedToken);
+          }
         } catch (e) {
           console.error("Failed to parse stored user:", e);
         }
@@ -52,6 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(newUser);
     sessionStorage.setItem("token", newToken);
     sessionStorage.setItem("user", JSON.stringify(newUser));
+    
+    // If the user is an admin, also store the token in localStorage for admin access
+    if (newUser.roleId === 1) {
+      localStorage.setItem("tokenAdmin", newToken);
+    }
   };
 
   const logout = () => {
@@ -59,6 +69,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     sessionStorage.removeItem("token");
     sessionStorage.removeItem("user");
+    
+    // Also clear admin token
+    localStorage.removeItem("tokenAdmin");
   };
 
   const refreshUser = async (customToken?: string) => {
@@ -95,6 +108,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Also update sessionStorage
         sessionStorage.setItem("user", JSON.stringify(data.data));
+        
+        // If user is an admin, ensure admin token is set
+        if (data.data.roleId === 1) {
+          localStorage.setItem("tokenAdmin", tokenToUse);
+        }
         
         console.log("User data refreshed successfully:", data.data);
         return data.data;

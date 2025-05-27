@@ -35,6 +35,8 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const resolvedParams = params instanceof Promise ? use(params) : params;
   const { id } = resolvedParams;
   const { token } = useAuth();
+  
+  // States
   const [item, setItem] = useState<NewsData | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -42,14 +44,29 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Debug logs
+  console.log("NewsDetailPage mounted");
+  console.log("ID from params:", id);
+  console.log("Token:", token ? "exists" : "missing");
 
   // Fetch news data
   useEffect(() => {
-    if (!token) return;
+    console.log("useEffect triggered - token:", !!token, "id:", id);
+    
+    if (!token) {
+      console.log("No token, skipping fetch");
+      setIsInitialLoading(false);
+      return;
+    }
     
     const fetchNewsData = async () => {
       try {
+        console.log("Fetching news data for ID:", id);
         setIsInitialLoading(true);
+        setError(null);
+        
         const response = await fetch(
           `http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`,
           {
@@ -60,15 +77,25 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           }
         );
 
+        console.log("API Response status:", response.status);
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log(data.data);
-        setItem(data.data);
-      } catch (error) {
+        console.log("API Response data:", data);
+        
+        if (data && data.statusCode === 1 && data.data) {
+          setItem(data.data);
+          console.log("News item set successfully");
+        } else {
+          console.error("Invalid API response structure or no data");
+          setError("Không tìm thấy bài viết");
+        }
+      } catch (error: any) {
         console.error("Error fetching news:", error);
+        setError(error.message || "Có lỗi xảy ra khi tải bài viết");
       } finally {
         setIsInitialLoading(false);
       }
@@ -79,7 +106,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
 
   // Fetch saved status
   useEffect(() => {
-    if (!token) return;
+    if (!token || !item) return;
 
     const fetchSavedNews = async () => {
       try {
@@ -113,11 +140,11 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     };
 
     fetchSavedNews();
-  }, [token, id]);
+  }, [token, id, item]);
 
   // Fetch comments
   useEffect(() => {
-    if (!token) return;
+    if (!token || !item) return;
 
     const fetchComments = async () => {
       try {
@@ -142,7 +169,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     };
 
     fetchComments();
-  }, [token, id]);
+  }, [token, id, item]);
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,6 +272,29 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     );
   }
 
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex items-center justify-center">
+        <div className="text-center py-12 px-6">
+          <div className="w-24 h-24 mx-auto mb-6 bg-red-100 rounded-full flex items-center justify-center">
+            <span className="text-3xl">⚠️</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">
+            Có lỗi xảy ra
+          </h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // No token state
   if (!token) {
     return (
@@ -301,7 +351,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
             {/* Header */}
             <header className="mb-8">
               <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6 leading-tight">
-                {item.title}
+                {item.header}
               </h1>
 
               {/* Author Info */}

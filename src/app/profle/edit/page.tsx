@@ -59,23 +59,46 @@ export default function EditProfilePage() {
     }
   }, [user, router]);
 
-  // Handle avatar change
+  // Handle avatar change với upload ngay lập tức
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     
     const file = e.target.files[0];
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: "Lỗi định dạng file",
+        description: "Chỉ hỗ trợ file ảnh (JPG, PNG, GIF, WEBP)",
+        variant: "destructive",
+        duration: 3000
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({
+        title: "File quá lớn",
+        description: "Kích thước file không được vượt quá 5MB",
+        variant: "destructive", 
+        duration: 3000
+      });
+      return;
+    }
+
     setImageFile(file);
     
     try {
       setIsUploading(true);
       
-      // Tạo đường dẫn tạm dựa trên tên file
-      const tempPath = `/placeholder/400/${file.name}`;
-      setAvatar(tempPath);
-      
-      // Nếu muốn upload ngay (không bắt buộc)
+      // Upload file ngay lập tức
       const formData = new FormData();
       formData.append("image", file);
+      
+      console.log("Đang upload file:", file.name);
       
       const uploadRes = await fetch("/api/upload", {
         method: "POST",
@@ -83,17 +106,27 @@ export default function EditProfilePage() {
       });
       
       if (!uploadRes.ok) {
-        throw new Error("Upload failed");
+        const errorText = await uploadRes.text();
+        console.error("Upload error:", errorText);
+        throw new Error(`Upload failed: ${uploadRes.status}`);
       }
       
       const uploadResult = await uploadRes.json();
-      setAvatar(uploadResult.filePath);
+      console.log("Upload result:", uploadResult);
       
-      toast({
-        title: "Tải ảnh thành công",
-        description: "Bạn có thể tiếp tục cập nhật thông tin",
-        duration: 3000
-      });
+      if (uploadResult.success && uploadResult.filePath) {
+        // Cập nhật avatar state với đường dẫn mới
+        setAvatar(uploadResult.filePath);
+        
+        toast({
+          title: "Tải ảnh thành công",
+          description: "Ảnh đại diện đã được tải lên",
+          duration: 3000
+        });
+      } else {
+        throw new Error("Upload không thành công");
+      }
+      
     } catch (error) {
       console.error("Lỗi khi tải ảnh:", error);
       toast({
@@ -102,6 +135,9 @@ export default function EditProfilePage() {
         variant: "destructive",
         duration: 3000
       });
+      
+      // Reset file input nếu upload thất bại
+      setImageFile(null);
     } finally {
       setIsUploading(false);
     }
@@ -124,12 +160,39 @@ export default function EditProfilePage() {
     setIsLoading(true);
     
     try {
+      // Nếu có file ảnh mới chưa được upload, upload trước
+      let finalAvatarPath = avatar;
+      
+      if (imageFile && !avatar.startsWith('/placeholder/400/')) {
+        console.log("Đang upload ảnh mới...");
+        const formData = new FormData();
+        formData.append("image", imageFile);
+        
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        
+        if (uploadRes.ok) {
+          const uploadResult = await uploadRes.json();
+          if (uploadResult.success && uploadResult.filePath) {
+            finalAvatarPath = uploadResult.filePath;
+            console.log("Ảnh đã được upload:", finalAvatarPath);
+          }
+        } else {
+          console.warn("Không thể upload ảnh, sử dụng ảnh hiện tại");
+        }
+      }
+      
+      // Chuẩn bị dữ liệu cập nhật
       const updateData = {
-        fullName: fullName,
-        phoneNumber: phoneNumber,
-        birthday: birthday,
-        avatar: avatar
+        fullname: fullName || "",
+        phoneNumber: phoneNumber || "",
+        birthday: birthday ? new Date(birthday).toISOString() : null,
+        avatar: finalAvatarPath || ""
       };
+      
+      console.log("Dữ liệu gửi đi:", updateData);
       
       const response = await fetch("http://localhost:5000/api/User/UpdateUserInfor", {
         method: "POST",
@@ -140,11 +203,23 @@ export default function EditProfilePage() {
         body: JSON.stringify(updateData),
       });
       
+      console.log("Response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Response error:", errorText);
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log("Response data:", data);
       
       if (data.statusCode === 1) {
         // Cập nhật thành công
         await refreshUser();
+        
+        // Cập nhật state local với dữ liệu mới
+        setAvatar(finalAvatarPath);
         
         toast({
           title: "Cập nhật thành công",
@@ -152,8 +227,11 @@ export default function EditProfilePage() {
           duration: 3000
         });
         
-        // Chuyển về trang profile
-        router.push("/profle");
+        // Reset imageFile sau khi thành công
+        setImageFile(null);
+        
+        // Điều hướng về trang edit (theo yêu cầu của bạn)
+        router.push("/profle/edit");
       } else {
         throw new Error(data.message || "Lỗi không xác định");
       }
@@ -182,7 +260,7 @@ export default function EditProfilePage() {
     <div className="w-full">
       <div className="flex items-center mb-6">
         <Link 
-          href="/profle" 
+          href="/" 
           className="p-2 mr-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
         >
           <ChevronLeft className="w-5 h-5" />
@@ -297,22 +375,6 @@ export default function EditProfilePage() {
                 className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
               />
             </div>
-            
-            {/* Tiểu sử */}
-            <div className="space-y-1.5">
-              <Label htmlFor="bio" className="flex items-center gap-2 text-sm text-gray-600">
-                <FileText className="w-4 h-4" />
-                Tiểu sử
-              </Label>
-              <textarea
-                id="bio"
-                placeholder="Thêm tiểu sử ngắn của bạn"
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                rows={3}
-              />
-            </div>
           </div>
         </div>
 
@@ -331,7 +393,7 @@ export default function EditProfilePage() {
           <Button
             type="submit"
             className="bg-emerald-600 hover:bg-emerald-700 flex-1"
-            disabled={isLoading}
+            disabled={isLoading || isUploading}
           >
             {isLoading ? (
               <>

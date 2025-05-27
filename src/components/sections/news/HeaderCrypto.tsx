@@ -236,10 +236,11 @@ export const HeaderCrypto = () => {
     router.push("/profle/saved");
   };
 
-  // Navigate to admin panel
-  const handleAdmin = () => {
-    router.push('/admin/login');
-  };
+  // Navigate directly to admin panel
+    const handleAdmin = () => {
+  // Since the user is already authenticated as admin, go directly to admin dashboard
+    router.push('/admin/accounts');
+};
 
   // ------------------------------------
   // AUTHENTICATION HANDLERS
