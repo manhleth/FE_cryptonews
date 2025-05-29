@@ -96,13 +96,28 @@ export default function Home() {
         const fetchAllNewsPromise = fetch(`http://localhost:5000/api/News/GetNewest`)
         .then(response => response.json())
         .then(data => {
+          console.log("API Response for GetNewest:", data); // Debug log
           if (data.statusCode === 1) {
-            // Thêm timeAgo cho mỗi bài viết
-            const newsWithTimeAgo = data.data?.map((item: any) => ({
-              ...item,
-              timeAgo: calculateTimeAgo(item.createdDate)
-            })) || [];
+            // Map dữ liệu từ API với các trường đúng
+            const newsWithTimeAgo = data.data?.map((item: any) => {
+              console.log("Individual news item:", item); // Debug log cho từng item
+              return {
+                newsID: item.newsId, // Backend trả về newsId
+                header: item.header,
+                title: item.title,
+                content: item.content,
+                imagesLink: item.imagesLink,
+                userName: item.userName, // Backend đã sửa để trả về userName
+                userAvartar: item.avatar, // Backend đã sửa để trả về avatar
+                timeReading: item.timeReading || 5,
+                categoryId: item.categoryId,
+                childrenCategoryID: item.childrenCategoryId,
+                createdDate: item.createdDate,
+                timeAgo: calculateTimeAgo(item.createdDate)
+              };
+            }) || [];
             
+            console.log("Mapped news data:", newsWithTimeAgo); // Debug log
             setAllNews(newsWithTimeAgo);
             return {
               sectionId: 'latest',
@@ -131,14 +146,29 @@ export default function Home() {
                 `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${section.categoryId}`
               );
               const data = await response.json();
+              console.log(`API Response for ${section.id}:`, data); // Debug log
               
-              // Thêm timeAgo cho mỗi bài viết trong category
+              // Map dữ liệu từ API với các trường đúng
               const newsWithTimeAgo = data.statusCode === 1 
-                ? data.data?.map((item: any) => ({
-                    ...item,
-                    timeAgo: calculateTimeAgo(item.createdDate)
-                  })) || []
+                ? data.data?.map((item: any) => {
+                    console.log(`Individual item for ${section.id}:`, item); // Debug log
+                    return {
+                      newsID: item.newsID, // API trả về newsID với chữ D viết hoa
+                      header: item.header,
+                      title: item.title,
+                      content: item.title, // Sử dụng title làm content tạm thời
+                      imagesLink: item.imagesLink,
+                      userName: item.userName, // API trả về userName
+                      userAvartar: item.userAvartar, // API trả về userAvartar
+                      timeReading: parseInt(item.timeReading) || 5,
+                      categoryId: section.categoryId,
+                      timeAgo: item.timeAgo || calculateTimeAgo(item.createdDate),
+                      createdDate: item.createdDate
+                    };
+                  }) || []
                 : [];
+              
+              console.log(`Mapped data for ${section.id}:`, newsWithTimeAgo); // Debug log
               
               return {
                 sectionId: section.id,
@@ -162,7 +192,7 @@ export default function Home() {
           newSectionsData[result.sectionId] = result.data;
         });
         
-        console.log("Dữ liệu các section:", newSectionsData);
+        console.log("Final sections data:", newSectionsData);
         setSectionsData(newSectionsData);
       } catch (err) {
         console.error("Error fetching sections data:", err);
@@ -205,7 +235,7 @@ export default function Home() {
         ) : sectionData.length > 0 ? (
           <ScrollableSection title="">
             {sectionData.map((item: NewsItem, index: number) => {
-              console.log(`Item in ${config.id}:`, item); // Debug info
+              console.log(`Rendering item for ${config.id}:`, item); // Debug info
               return (
                 <div key={item.newsID || index} className="transform transition-all duration-300 hover:scale-105">
                   <NewsCard
@@ -216,14 +246,14 @@ export default function Home() {
                       timeAgo: item.timeAgo || "Gần đây",
                       readTime: typeof item.timeReading === 'number' ? `${item.timeReading} phút` : "5 phút",
                       image: item.imagesLink || "",
-                      excerpt: item.content?.slice(0, 100) || "",
+                      excerpt: item.content?.slice(0, 100) || item.title?.slice(0, 100) || "",
                       userName: item.userName || "",
                       CreatedDate: item.createdDate || "",
                       timeReading: typeof item.timeReading === 'number' ? `${item.timeReading}` : "5",
                       header: item.header || item.title || "",
                       newsID: item.newsID,
                       imagesLink: item.imagesLink || "",
-                      userAvartar: item.userAvartar || "", // Đảm bảo truyền đúng trường avatar
+                      userAvartar: item.userAvartar || "", // Truyền đúng trường avatar
                     }}
                   />
                 </div>
