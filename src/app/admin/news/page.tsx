@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   FileText, 
   Search, 
@@ -13,7 +13,11 @@ import {
   MoreVertical,
   AlertCircle,
   Check,
-  TrendingUp
+  TrendingUp,
+  Edit,
+  Save,
+  X,
+  Loader2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -21,9 +25,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/AuthContext";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Article = {
   id: number;
+  newsId: number;
   title: string;
   content: string;
   published: boolean;
@@ -33,9 +45,27 @@ type Article = {
   category?: string;
   excerpt?: string;
   image?: string;
+  header?: string;
+  footer?: string;
+  timeReading?: number;
+  links?: string;
+  categoryId?: number;
+  childrenCategoryId?: number;
+  imagesLink?: string;
 };
 
 type FilterType = 'all' | 'published' | 'draft';
+
+interface Category {
+  categoryId: number;
+  categoryName: string;
+}
+
+interface ChildrenCategory {
+  childrenCategoryID: number;
+  childrenCategoryName: string;
+  parentCategoryId: number;
+}
 
 export default function NewsPage() {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -48,49 +78,35 @@ export default function NewsPage() {
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<FilterType>('all');
+  
+  // Edit modal states
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedNewsId, setSelectedNewsId] = useState<number | null>(null);
+  
+  // Edit form state
+  const [header, setHeader] = useState("");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [footer, setFooter] = useState("");
+  const [timeReading, setTimeReading] = useState("");
+  const [links, setLinks] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedChildCategory, setSelectedChildCategory] = useState<string>("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [childCategories, setChildCategories] = useState<ChildrenCategory[]>([]);
 
+  const { toast } = useToast();
+  const { token } = useAuth();
+  
   // Hard-code token từ API (nên thay bằng cách quản lý token hợp lý)
   const valueToken = localStorage.getItem("tokenAdmin");
 
-  // Hàm lấy danh sách tin tức từ API
-  const fetchNews = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch("http://localhost:5000/api/News/GetAllNewAdmin", {
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${valueToken}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error("Lỗi khi lấy danh sách tin tức");
-      }
-      const result = await response.json();
-      if (result.statusCode !== 1 || !result.data) {
-        throw new Error("Lỗi dữ liệu từ API");
-      }
-      // Giả sử API trả về mảng tin tức với trường 'newsId' làm id
-      const mappedArticles: Article[] = result.data.map((item: any) => ({
-        id: item.newsId,
-        title: item.title || "",
-        content: item.content || "",
-        published: item.published,
-        author: item.userName || item.author || "",
-        createdAt: item.createdDate || "",
-        views: Math.floor(Math.random() * 10000), // Mock views
-        category: item.categoryName || "",
-        excerpt: item.header || "",
-        image: item.imagesLink || "",
-      }));
-      setArticles(mappedArticles);
-      setSelectedArticles([]);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Lấy danh sách tin tức từ API khi component mount
   useEffect(() => {
     fetchNews();
   }, []);
@@ -109,8 +125,8 @@ export default function NewsPage() {
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(a => 
-        a.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.content?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         a.author?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         a.category?.toLowerCase().includes(searchTerm.toLowerCase())
       );
@@ -129,6 +145,166 @@ export default function NewsPage() {
       return () => clearTimeout(timer);
     }
   }, [error, success]);
+
+  // Fetch child categories when parent category changes
+  useEffect(() => {
+    if (selectedCategory && isEditModalOpen) {
+      fetchChildCategories(selectedCategory);
+    } else {
+      setChildCategories([]);
+    }
+  }, [selectedCategory, isEditModalOpen]);
+
+  // Fetch news details when modal opens with a news ID
+  useEffect(() => {
+    if (isEditModalOpen && selectedNewsId) {
+      fetchNewsDetails();
+      fetchCategories();
+    }
+  }, [isEditModalOpen, selectedNewsId]);
+
+  // Hàm gọi API GET để lấy danh sách tin tức
+  const fetchNews = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("http://localhost:5000/api/News/GetAllNewAdmin", {
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${valueToken}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error("Lỗi khi lấy danh sách tin tức");
+      }
+      const result = await response.json();
+      if (result.statusCode !== 1 || !result.data) {
+        throw new Error("Lỗi dữ liệu từ API");
+      }
+      // Ánh xạ dữ liệu từ API sang kiểu FE, xử lý giá trị null
+      const mappedArticles: Article[] = result.data.map((item: any) => ({
+        id: item.newsId,
+        newsId: item.newsId,
+        title: item.title || "",
+        content: item.content || "",
+        published: true, // Giả sử tất cả tin tức đã được xuất bản
+        author: item.userName || item.author || "",
+        createdAt: item.createdDate || "",
+        views: Math.floor(Math.random() * 10000), // Mock views
+        category: item.categoryName || "",
+        excerpt: item.header || "",
+        image: item.imagesLink || "",
+        header: item.header || "",
+        footer: item.footer || "",
+        timeReading: item.timeReading,
+        links: item.links || "",
+        categoryId: item.categoryId,
+        childrenCategoryId: item.childrenCategoryId,
+        imagesLink: item.imagesLink || ""
+      }));
+      setArticles(mappedArticles);
+      setLoading(false);
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  // Fetch news details
+  const fetchNewsDetails = async () => {
+    if (!selectedNewsId) return;
+    
+    setEditLoading(true);
+    try {
+      const response = await fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${selectedNewsId}`, {
+        headers: {
+          "Authorization": `Bearer ${valueToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.statusCode === 1 && result.data) {
+        const newsData = result.data;
+        
+        // Set form values
+        setHeader(newsData.header || "");
+        setTitle(newsData.title || "");
+        setContent(newsData.content || "");
+        setFooter(newsData.footer || "");
+        setTimeReading(newsData.timeReading?.toString() || "");
+        setLinks(newsData.links || "");
+        setSelectedCategory(newsData.categoryId?.toString() || "");
+        setSelectedChildCategory(newsData.childrenCategoryId?.toString() || "");
+        setImageUrl(newsData.imagesLink || "");
+        setImagePreview(newsData.imagesLink || null);
+      } else {
+        toast({
+          title: "Lỗi",
+          description: "Không thể tải thông tin bài viết",
+          variant: "destructive",
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching news details:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi tải thông tin bài viết",
+        variant: "destructive",
+        duration: 3000
+      });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  // Fetch categories
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/Category/GetAllCategories");
+      const result = await response.json();
+      
+      if (result.statusCode === 1 && result.data) {
+        setCategories(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+    }
+  };
+
+  // Fetch child categories
+  const fetchChildCategories = async (parentId: string) => {
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/ChildrenCategory/GetChildrenCategoriesByParenID?ParentID=${parentId}`, {
+          headers: {
+            "Authorization": `Bearer ${valueToken}`
+          }
+        }
+      );
+      
+      const result = await response.json();
+      
+      if (result.statusCode === 1 && result.data) {
+        setChildCategories(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching child categories:", error);
+    }
+  };
+
+  // Handle image file change
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleSelectChange = (id: number, checked: boolean) => {
     if (checked) {
@@ -169,6 +345,7 @@ export default function NewsPage() {
       // Load lại danh sách sau khi xóa
       fetchNews();
       setSuccess(`Đã xóa ${selectedArticles.length} bài viết thành công!`);
+      setSelectedArticles([]);
     } catch (err: any) {
       setError(err.message);
     }
@@ -187,10 +364,147 @@ export default function NewsPage() {
       if (!response.ok) {
         throw new Error("Lỗi khi xóa bài viết");
       }
-      fetchNews();
-      setSuccess("Bài viết đã được xóa thành công!");
+      // Cập nhật lại danh sách sau khi xóa thành công
+      setArticles(articles.filter((article) => article.id !== id));
+      toast({
+        title: "Thành công",
+        description: "Bài viết đã được xóa",
+        duration: 3000
+      });
     } catch (err: any) {
       setError(err.message);
+      toast({
+        title: "Lỗi",
+        description: err.message,
+        variant: "destructive",
+        duration: 3000
+      });
+    }
+  };
+
+  // Hàm mở modal sửa bài viết
+  const handleEdit = (id: number) => {
+    setSelectedNewsId(id);
+    setIsEditModalOpen(true);
+  };
+
+  // Hàm đóng modal và reset state
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setSelectedNewsId(null);
+    // Reset form state
+    setHeader("");
+    setTitle("");
+    setContent("");
+    setFooter("");
+    setTimeReading("");
+    setLinks("");
+    setSelectedCategory("");
+    setSelectedChildCategory("");
+    setImageUrl("");
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (!selectedNewsId) return;
+    
+    // Validate form
+    if (!header.trim() || !title.trim() || !content.trim() || !footer.trim() || !timeReading) {
+      toast({
+        title: "Thiếu thông tin",
+        description: "Vui lòng điền đầy đủ thông tin bắt buộc",
+        variant: "destructive",
+        duration: 3000
+      });
+      return;
+    }
+    
+    setSubmitting(true);
+    
+    try {
+      // If there's a new image, upload it first
+      let finalImageUrl = imageUrl;
+      
+      if (imageFile) {
+        const imageFormData = new FormData();
+        imageFormData.append("image", imageFile);
+        
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: imageFormData,
+        });
+        
+        if (uploadRes.ok) {
+          const uploadResult = await uploadRes.json();
+          if (uploadResult.success && uploadResult.filePath) {
+            finalImageUrl = uploadResult.filePath;
+          }
+        } else {
+          toast({
+            title: "Lỗi tải ảnh",
+            description: "Không thể tải ảnh lên, nhưng vẫn tiếp tục cập nhật bài viết",
+            variant: "destructive",
+            duration: 3000
+          });
+        }
+      }
+      
+      // Prepare data for API
+      const newsData = {
+        header,
+        title,
+        content,
+        footer,
+        timeReading: parseInt(timeReading) || 0,
+        links,
+        categoryId: selectedCategory ? parseInt(selectedCategory) : null,
+        childrenCategoryId: selectedChildCategory ? parseInt(selectedChildCategory) : null,
+        imagesLink: finalImageUrl
+      };
+      
+      // Update news via API
+      const response = await fetch(`http://localhost:5000/api/News/UpdateNews?id=${selectedNewsId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${valueToken}`
+        },
+        body: JSON.stringify(newsData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.statusCode === 1) {
+        toast({
+          title: "Thành công",
+          description: "Cập nhật bài viết thành công",
+          duration: 3000
+        });
+        
+        // Refresh news list
+        fetchNews();
+        
+        // Close the modal
+        handleCloseEditModal();
+      } else {
+        throw new Error(result.message || "Lỗi không xác định");
+      }
+    } catch (error: any) {
+      console.error("Error updating news:", error);
+      toast({
+        title: "Lỗi cập nhật",
+        description: error.message || "Có lỗi xảy ra khi cập nhật bài viết",
+        variant: "destructive",
+        duration: 3000
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -219,7 +533,7 @@ export default function NewsPage() {
       return (
         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
           <Clock className="w-3 h-3 mr-1" />
-          Bản nhóp
+          Bản nháp
         </span>
       );
     }
@@ -315,17 +629,17 @@ export default function NewsPage() {
       {/* Articles Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {filteredArticles.map((article) => (
-          <div key={article.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-            {/* Image */}
-            <div className="relative h-48 bg-gray-200">
+          <div key={article.id} className="border border-gray-200 hover:border-emerald-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
+            {/* Ảnh bài viết */}
+            <div className="relative w-full h-48 overflow-hidden">
               {article.image ? (
-                <img 
-                  src={article.image} 
+                <img
+                  src={article.image}
                   alt={article.title}
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center">
+                <div className="w-full h-full flex items-center justify-center bg-gray-200">
                   <FileText className="w-12 h-12 text-gray-400" />
                 </div>
               )}
@@ -345,9 +659,9 @@ export default function NewsPage() {
                 {getStatusBadge(article.published)}
               </div>
             </div>
-
-            {/* Content */}
-            <div className="p-6">
+            
+            {/* Nội dung */}
+            <div className="p-6 flex-1 flex flex-col">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs text-emerald-600 font-medium">#{article.id}</span>
                 <DropdownMenu>
@@ -357,13 +671,20 @@ export default function NewsPage() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem className="flex items-center space-x-2">
+                    <DropdownMenuItem 
+                      onClick={() => handleEdit(article.newsId)}
+                      className="flex items-center space-x-2 cursor-pointer"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>Chỉnh sửa</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
                       <Eye className="w-4 h-4" />
                       <span>Xem chi tiết</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem 
                       onClick={() => handleDelete(article.id)}
-                      className="flex items-center space-x-2 text-red-600 focus:text-red-600"
+                      className="flex items-center space-x-2 text-red-600 focus:text-red-600 cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                       <span>Xóa bài viết</span>
@@ -372,18 +693,18 @@ export default function NewsPage() {
                 </DropdownMenu>
               </div>
 
-              <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+              <h3 className="text-lg font-semibold mb-2 line-clamp-2">
                 {article.title}
               </h3>
-
+              
               {article.excerpt && (
-                <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                <p className="text-sm text-gray-600 mb-3 line-clamp-3 flex-1">
                   {article.excerpt}
                 </p>
               )}
-
+              
               {/* Meta info */}
-              <div className="space-y-2">
+              <div className="space-y-2 mt-auto pt-3 border-t border-gray-100">
                 <div className="flex items-center text-xs text-gray-500">
                   <User className="w-3 h-3 mr-1" />
                   <span>{article.author || 'Unknown'}</span>
@@ -499,6 +820,228 @@ export default function NewsPage() {
           Hiển thị {filteredArticles.length} / {articles.length} bài viết
         </div>
       )}
+
+      {/* Edit Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={handleCloseEditModal}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="p-6 border-b">
+            <DialogTitle className="text-xl font-semibold flex items-center">
+              Chỉnh sửa bài viết #{selectedNewsId}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {editLoading ? (
+            <div className="flex justify-center items-center p-12">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+              <span className="ml-2 text-gray-600">Đang tải thông tin bài viết...</span>
+            </div>
+          ) : (
+            <ScrollArea className="max-h-[calc(90vh-10rem)]">
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Left column */}
+                  <div className="space-y-6">
+                    {/* Header */}
+                    <div className="space-y-2">
+                      <Label htmlFor="header" className="font-medium">
+                        Tiêu đề bài viết <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="header"
+                        value={header}
+                        onChange={(e) => setHeader(e.target.value)}
+                        placeholder="Nhập tiêu đề bài viết"
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    {/* Title (description) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="title" className="font-medium">
+                        Mô tả ngắn <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="title"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="Nhập mô tả ngắn"
+                        className="w-full"
+                      />
+                    </div>
+                    
+                    {/* Content */}
+                    <div className="space-y-2">
+                      <Label htmlFor="content" className="font-medium">
+                        Nội dung <span className="text-red-500">*</span>
+                      </Label>
+                      <textarea
+                        id="content"
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        placeholder="Nhập nội dung bài viết"
+                        className="w-full h-40 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    
+                    {/* Footer */}
+                    <div className="space-y-2">
+                      <Label htmlFor="footer" className="font-medium">
+                        Kết luận <span className="text-red-500">*</span>
+                      </Label>
+                      <textarea
+                        id="footer"
+                        value={footer}
+                        onChange={(e) => setFooter(e.target.value)}
+                        placeholder="Nhập kết luận"
+                        className="w-full h-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Right column */}
+                  <div className="space-y-6">
+                    {/* Image Preview & Upload */}
+                    <div className="space-y-2">
+                      <Label htmlFor="image" className="font-medium">
+                        Ảnh bìa
+                      </Label>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-emerald-500 transition-all relative">
+                        {imagePreview ? (
+                          <div className="space-y-3">
+                            <img
+                              src={imagePreview}
+                              alt="Preview"
+                              className="max-h-40 mx-auto object-cover rounded-lg"
+                            />
+                            <p className="text-sm text-emerald-600">Nhấp để thay đổi ảnh</p>
+                          </div>
+                        ) : (
+                          <div className="py-4">
+                            <p className="text-gray-500">Nhấp để tải ảnh lên</p>
+                            <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (tối đa 2MB)</p>
+                          </div>
+                        )}
+                        <input
+                          id="image"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Metadata fields */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Time Reading */}
+                      <div className="space-y-2">
+                        <Label htmlFor="timeReading" className="font-medium">
+                          Thời gian đọc (phút) <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="timeReading"
+                          type="number"
+                          min="1"
+                          value={timeReading}
+                          onChange={(e) => setTimeReading(e.target.value)}
+                          placeholder="Nhập thời gian đọc"
+                        />
+                      </div>
+                      
+                      {/* Links */}
+                      <div className="space-y-2">
+                        <Label htmlFor="links" className="font-medium">
+                          Liên kết
+                        </Label>
+                        <Input
+                          id="links"
+                          value={links}
+                          onChange={(e) => setLinks(e.target.value)}
+                          placeholder="Nhập liên kết"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Categories */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Parent Category */}
+                      <div className="space-y-2">
+                        <Label htmlFor="category" className="font-medium">
+                          Danh mục <span className="text-red-500">*</span>
+                        </Label>
+                        <select
+                          id="category"
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          <option value="">Chọn danh mục</option>
+                          {categories.map((category) => (
+                            <option key={category.categoryId} value={category.categoryId}>
+                              {category.categoryName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Child Category */}
+                      <div className="space-y-2">
+                        <Label htmlFor="childCategory" className="font-medium">
+                          Danh mục con
+                        </Label>
+                        <select
+                          id="childCategory"
+                          value={selectedChildCategory}
+                          onChange={(e) => setSelectedChildCategory(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          disabled={!selectedCategory}
+                        >
+                          <option value="">Chọn danh mục con</option>
+                          {childCategories.map((category) => (
+                            <option key={category.childrenCategoryID} value={category.childrenCategoryID}>
+                              {category.childrenCategoryName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <DialogFooter className="flex justify-end gap-3 mt-8 pt-4 border-t">
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={handleCloseEditModal}
+                    disabled={submitting}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Hủy
+                  </Button>
+                  <Button 
+                    type="button"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    disabled={submitting}
+                    onClick={handleSubmit}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Đang cập nhật...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Lưu thay đổi
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

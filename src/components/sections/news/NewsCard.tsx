@@ -31,9 +31,6 @@ export const NewsCard = ({ item }: NewsCardProps) => {
   const [isSaved, setIsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Debug log
-  console.log("NewsCard rendered with item:", item);
-
   useEffect(() => {
     const fetchSavedNews = async () => {
       try {
@@ -58,11 +55,6 @@ export const NewsCard = ({ item }: NewsCardProps) => {
   }, [token, item.newsID]);
 
   const handleCardClick = () => {
-    console.log("Card clicked!");
-    console.log("Navigating to:", `/news/${item.newsID}`);
-    console.log("Item newsID:", item.newsID);
-    
-    // Sử dụng router.push để điều hướng
     router.push(`/news/${item.newsID}`);
   };
 
@@ -99,31 +91,30 @@ export const NewsCard = ({ item }: NewsCardProps) => {
     e.preventDefault();
     e.stopPropagation();
     
-    // Logic chia sẻ ở đây
     const url = `${window.location.origin}/news/${item.newsID}`;
     if (navigator.share) {
       navigator.share({
-        title: item.header,
+        title: item.header || item.title,
         text: item.title,
         url: url,
       });
     } else {
-      // Fallback: copy to clipboard
       navigator.clipboard.writeText(url);
-      console.log("URL copied to clipboard");
     }
   };
 
   return (
     <Card 
-      className="min-w-[300px] md:min-w-[350px] flex-none group hover:shadow-lg transition-all duration-300 bg-white border border-gray-200 hover:border-emerald-200 overflow-hidden rounded-xl cursor-pointer"
+      className="w-[280px] flex-none group hover:shadow-lg transition-all duration-300 bg-white border border-gray-200 hover:border-emerald-200 overflow-hidden rounded-xl cursor-pointer"
       onClick={handleCardClick}
+      style={{ height: '400px' }} // Cố định chiều cao card
     >
-      <div className="relative overflow-hidden">
+      {/* Ảnh bài viết - cố định chiều cao */}
+      <div className="relative w-full h-[160px] overflow-hidden">
         <img
           src={item.imagesLink || "/placeholder/400/250.jpg"}
-          alt={item.header}
-          className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105"
+          alt={item.header || item.title}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         
@@ -134,53 +125,56 @@ export const NewsCard = ({ item }: NewsCardProps) => {
         </div>
       </div>
       
-      <CardContent className="p-6">
-        <div className="flex items-center gap-3 mb-3">
-          <Avatar className="w-8 h-8">
-            <AvatarImage src={item.userAvartar || "/api/placeholder/24/24"} alt="avatar" />
+      {/* Nội dung bài viết */}
+      <CardContent className="p-4 flex flex-col h-[240px]">
+        {/* Thông tin tác giả */}
+        <div className="flex items-center gap-2 mb-3">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={item.userAvartar || "/placeholder/400/250.jpg"} alt={item.userName || "User"} />
             <AvatarFallback className="bg-emerald-100 text-emerald-700">
-              {item.userName?.charAt(0) || 'A'}
+              {item.userName?.charAt(0)?.toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1">
-            <span className="text-sm text-gray-700 font-medium">{item.userName}</span>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span>{item.timeAgo}</span>
-              <span>•</span>
-              <span>{item.timeReading} min read</span>
-            </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">{item.userName || "Unknown"}</p>
+            <p className="text-xs text-gray-500">{item.timeAgo || "Gần đây"}</p>
           </div>
         </div>
         
-        <h3 className="font-bold text-lg mb-2 line-clamp-2 text-gray-900 group-hover:text-emerald-600 transition-colors">
-          {item.header}
+        {/* Tiêu đề bài viết */}
+        <h3 className="font-bold text-base mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+          {item.header || item.title}
         </h3>
-        <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-          {item.title}
+        
+        {/* Mô tả ngắn */}
+        <p className="text-sm text-gray-600 line-clamp-3 mb-auto">
+          {item.title || item.excerpt}
         </p>
         
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Clock size={16} />
-            <span>{item.timeReading} min</span>
+        {/* Footer với thời gian đọc và các nút */}
+        <div className="flex items-center justify-between mt-4 pt-2 border-t border-gray-100">
+          <div className="flex items-center text-xs text-gray-500">
+            <Clock className="h-3.5 w-3.5 mr-1" />
+            <span>{item.timeReading || "5"} phút đọc</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <button
               onClick={handleBookmarkClick}
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
               aria-label="Toggle Bookmark"
               disabled={loading}
             >
               <BookmarkIcon
-                size={18}
+                size={16}
                 className={`${isSaved ? 'fill-emerald-500 text-emerald-500' : 'text-gray-400 hover:text-emerald-500'} transition-colors`}
               />
             </button>
             <button 
               onClick={handleShareClick}
-              className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+              aria-label="Share"
             >
-              <Share2 size={18} className="text-gray-400 hover:text-emerald-500 transition-colors" />
+              <Share2 size={16} className="text-gray-400 hover:text-emerald-500 transition-colors" />
             </button>
           </div>
         </div>

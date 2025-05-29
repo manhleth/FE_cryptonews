@@ -1,11 +1,11 @@
 // src/app/news/[id]/page.tsx
 "use client"
 import { notFound } from "next/navigation";
-import { mockNews } from "@/data/mockData";
 import { Share2, BookmarkIcon, Clock, User, Calendar } from "lucide-react";
 import { use, useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import CommentSection from "@/components/Comments";
+import Link from "next/link";
 
 interface NewsDetailPageProps {
   params: Promise<{ id: string }> | { id: string };
@@ -21,6 +21,7 @@ interface NewsData {
   avatar: string;
   categoryId: number;
   imagesLink: string;
+  newsID: number;
 }
 
 interface Comment {
@@ -34,7 +35,7 @@ interface Comment {
 export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const resolvedParams = params instanceof Promise ? use(params) : params;
   const { id } = resolvedParams;
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   
   // States
   const [item, setItem] = useState<NewsData | null>(null);
@@ -45,6 +46,10 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   const [loading, setLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // State cho bài viết liên quan
+  const [relatedPosts, setRelatedPosts] = useState<NewsData[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
 
   // Debug logs
   console.log("NewsDetailPage mounted");
@@ -55,26 +60,15 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
   useEffect(() => {
     console.log("useEffect triggered - token:", !!token, "id:", id);
     
-    if (!token) {
-      console.log("No token, skipping fetch");
-      setIsInitialLoading(false);
-      return;
-    }
-    
     const fetchNewsData = async () => {
       try {
         console.log("Fetching news data for ID:", id);
         setIsInitialLoading(true);
         setError(null);
         
+        // Không bắt buộc token để lấy dữ liệu bài viết
         const response = await fetch(
-          `http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`,
-          {
-            method: "GET",
-            headers: {
-              "Authorization": `Bearer ${token}`
-            }
-          }
+          `http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`
         );
 
         console.log("API Response status:", response.status);
@@ -102,9 +96,45 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     };
 
     fetchNewsData();
-  }, [token, id]);
+  }, [id]);
 
-  // Fetch saved status
+  // Fetch bài viết liên quan khi có thông tin về categoryId
+  useEffect(() => {
+    if (!item || !item.categoryId) return;
+
+    const fetchRelatedPosts = async () => {
+      try {
+        setLoadingRelated(true);
+        // Sử dụng API GetNewsByCategoryTop để lấy bài viết mới nhất trong cùng danh mục
+        const response = await fetch(
+          `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${item.categoryId}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data && data.statusCode === 1 && data.data) {
+          // Lọc ra các bài viết khác với bài viết hiện tại và chỉ lấy 3 bài
+          const filteredPosts = data.data
+            .filter((post: NewsData) => post.newsID != Number(id))
+            .slice(0, 3);
+          
+          setRelatedPosts(filteredPosts);
+        }
+      } catch (error) {
+        console.error("Error fetching related posts:", error);
+      } finally {
+        setLoadingRelated(false);
+      }
+    };
+
+    fetchRelatedPosts();
+  }, [item, id]);
+
+  // Fetch saved status - chỉ khi đã đăng nhập
   useEffect(() => {
     if (!token || !item) return;
 
@@ -142,19 +172,14 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     fetchSavedNews();
   }, [token, id, item]);
 
-  // Fetch comments
+  // Fetch comments - không cần token để xem comments
   useEffect(() => {
-    if (!token || !item) return;
+    if (!item) return;
 
     const fetchComments = async () => {
       try {
         const response = await fetch(
-          `http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+          `http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`
         );
 
         if (!response.ok) {
@@ -169,7 +194,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     };
 
     fetchComments();
-  }, [token, id, item]);
+  }, [id, item]);
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +203,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     try {
       setLoading(true);
       const response = await fetch(
-        `http://localhost:5000/api/Comments/AddComment`,
+        `http://localhost:5000/api/Comment/CreateNewComment`,
         {
           method: "POST",
           headers: {
@@ -211,7 +236,11 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!token) return;
+    if (!token) {
+      // Hiển thị thông báo khi người dùng chưa đăng nhập
+      alert("Vui lòng đăng nhập để lưu bài viết này");
+      return;
+    }
 
     try {
       setLoading(true);
@@ -290,25 +319,6 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           >
             Thử lại
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  // No token state
-  if (!token) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex items-center justify-center">
-        <div className="text-center py-12 px-6">
-          <div className="w-24 h-24 mx-auto mb-6 bg-emerald-100 rounded-full flex items-center justify-center">
-            <User className="w-12 h-12 text-emerald-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Đăng nhập để tiếp tục
-          </h2>
-          <p className="text-gray-600">
-            Vui lòng đăng nhập để xem chi tiết bài viết
-          </p>
         </div>
       </div>
     );
@@ -416,7 +426,82 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
 
             {/* Comments Section */}
             <div className="border-t border-emerald-100 pt-8">
-              <CommentSection newsId={Number(id)} />
+              <h2 className="text-lg font-semibold mb-4">Bình luận</h2>
+
+              {/* Khung scrollable cho danh sách comment */}
+              <div className="border rounded-md p-3 max-h-96 overflow-y-auto space-y-4">
+                {comments.length > 0 ? (
+                  comments.slice(0, visibleCount).map((comment, index) => (
+                    <div key={comment.commentId || index} className="flex items-start gap-2">
+                      {/* Ảnh avatar */}
+                      <div className="h-8 w-8 rounded-full overflow-hidden">
+                        <img
+                          src={comment.userAvartar || "/default-avatar.png"}
+                          alt={comment.userFullName}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      {/* Khối nội dung comment */}
+                      <div className="flex-1">
+                        <div className="bg-gray-100 rounded-xl p-3">
+                          <div className="font-semibold text-sm">{comment.userFullName}</div>
+                          <p className="text-sm mt-1">{comment.content}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-gray-500">
+                    Chưa có bình luận nào cho bài viết này
+                  </div>
+                )}
+
+                {/* Nút Xem thêm nếu còn comment ẩn */}
+                {visibleCount < comments.length && (
+                  <button
+                    onClick={() => setVisibleCount((prev) => prev + 5)}
+                    className="block mx-auto mt-2 text-blue-600 text-sm hover:underline"
+                  >
+                    Xem thêm {comments.length - visibleCount} bình luận
+                  </button>
+                )}
+              </div>
+
+              {/* Form nhập comment - chỉ hiển thị khi đã đăng nhập */}
+              {token ? (
+                <form onSubmit={handleSubmitComment} className="flex items-center gap-2 mt-4">
+                  <div className="h-8 w-8 rounded-full overflow-hidden">
+                    <img
+                      src={user?.avatar || "/default-avatar.png"}
+                      alt={user?.fullname}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      className="w-full p-2 border rounded-full focus:outline-none"
+                      placeholder="Viết bình luận..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-3 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700"
+                  >
+                    Gửi
+                  </button>
+                </form>
+              ) : (
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg text-center">
+                  <p className="text-gray-600">
+                    <Link href="/User/Login" className="text-blue-600 hover:underline">
+                      Đăng nhập
+                    </Link>{" "}
+                    để bình luận về bài viết này
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </article>
@@ -429,42 +514,59 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
               Bài viết liên quan
             </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              {mockNews.slice(0, 4).map((related) => (
-                <div key={related.id} className="group cursor-pointer">
-                  <div className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-all duration-300">
-                    <div className="aspect-video relative overflow-hidden">
-                      <img
-                        src={related.image}
-                        alt={related.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                    
-                    <div className="p-4">
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+            {loadingRelated ? (
+              // Loading state for related posts
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="bg-gray-200 h-40 rounded-lg mb-4"></div>
+                    <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  </div>
+                ))}
+              </div>
+            ) : relatedPosts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {relatedPosts.map((post) => (
+                  <Link href={`/news/${post.newsID}`} key={post.newsID} className="group">
+                    <div className="bg-gray-50 rounded-xl overflow-hidden hover:shadow-md transition-all duration-300 h-full flex flex-col">
+                      <div className="aspect-video relative overflow-hidden">
                         <img
-                          src="/api/placeholder/20/20"
-                          alt={related.author}
-                          className="w-5 h-5 rounded-full"
+                          src={post.imagesLink || "/placeholder/400/250.jpg"}
+                          alt={post.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
-                        <span>{related.author}</span>
-                        <span>•</span>
-                        <span>{related.timeAgo}</span>
                       </div>
                       
-                      <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
-                        {related.title}
-                      </h3>
-                      
-                      <p className="text-sm text-gray-600 line-clamp-2">
-                        {related.excerpt}
-                      </p>
+                      <div className="p-4 flex-1 flex flex-col">
+                        <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                          <img
+                            src={post.avatar || "/placeholder/20/20"}
+                            alt={post.userName}
+                            className="w-5 h-5 rounded-full"
+                          />
+                          <span>{post.userName}</span>
+                          <span>•</span>
+                          <span>{post.timeReading} phút đọc</span>
+                        </div>
+                        
+                        <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                          {post.header || post.title}
+                        </h3>
+                        
+                        <p className="text-sm text-gray-600 line-clamp-2 flex-1">
+                          {post.content?.slice(0, 100)}...
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                Không có bài viết liên quan
+              </div>
+            )}
           </div>
         </section>
       </div>

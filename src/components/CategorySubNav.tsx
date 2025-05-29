@@ -5,9 +5,6 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ScrollArea } from "@radix-ui/react-scroll-area";
 import { ScrollBar } from "./ui/scroll-area";
-import Image from "next/image";
-
-// import { ScrollArea } from "@/components/ui/scroll-area"; // Nếu muốn dùng shadcn scroll
 
 interface ChildrenCategory {
   childrenCategoryID: number;
@@ -80,61 +77,26 @@ export function CategorySubNav({ parentId }: CategorySubNavProps) {
 
   return (
     <div className="w-full">
-    {/* Banner section with parentName overlay */}
-    <div className="relative w-full h-64">
-      <Image 
-        src="/placeholder/400/anhto.png" // Cần thay đổi đường dẫn này tới ảnh của bạn
-        alt={"Crypto Knowledge Banner"}
-        fill
-        className="object-cover"
-        priority
-      />
-      <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white p-4">
-        <h1 className="text-4xl font-bold text-center">
-          {"Learn - Thư viện kiến thức Crypto"}
-        </h1>
-        <p className="mt-4 text-center max-w-3xl">
-          Lộ trình kiến thức Crypto cần trang bị trước khi bước vào thị trường: Blockchain, tiền mã hóa và kinh nghiệm đầu tư Crypto.
-        </p>
-      </div>
-      
-      {/* Search bar */}
-      <div className="absolute bottom-5 left-0 right-0 flex justify-center">
-        <div className="relative w-full max-w-xl mx-4">
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <svg className="w-4 h-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <input 
-            type="text" 
-            placeholder="Search in portal" 
-            className="pl-10 pr-4 py-2 w-full rounded-full bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white/50"
-          />
+      {/* Categories navigation */}
+      <nav className="w-full bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <ScrollArea className="w-full">
+            <div className="flex items-center justify-center gap-6">
+              {childrenCategories.map((child) => (
+                <Link
+                  key={child.childrenCategoryID}
+                  href={`#child-${child.childrenCategoryID}`}
+                  className="text-gray-600 hover:text-gray-900 whitespace-nowrap px-2 py-1"
+                  onClick={(e) => handleNavClick(e, `child-${child.childrenCategoryID}`)}
+                >
+                  {child.childrenCategoryName}
+                </Link>
+              ))}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
         </div>
-      </div>
+      </nav>
     </div>
-
-    {/* Categories navigation */}
-    <nav className="w-full bg-white shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <ScrollArea className="w-full">
-          <div className="flex items-center justify-center gap-6">
-            {childrenCategories.map((child) => (
-              <Link
-                key={child.childrenCategoryID}
-                href={`#child-${child.childrenCategoryID}`}
-                className="text-gray-600 hover:text-gray-900 whitespace-nowrap px-2 py-1"
-                onClick={(e) => handleNavClick(e, `child-${child.childrenCategoryID}`)}
-              >
-                {child.childrenCategoryName}
-              </Link>
-            ))}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-      </div>
-    </nav>
-  </div>
   );
 }

@@ -21,10 +21,13 @@ interface NewsItem {
   content: string;
   imagesLink: string;
   userName: string;
-  avatar: string;
+  userAvartar: string; // Đảm bảo tên trường đúng với API
   timeReading: number;
+  timeAgo?: string;
   categoryId: number;
   childrenCategoryID?: number;
+  header: string; // Đảm bảo có trường header
+  createdDate?: string; // Thêm trường createdDate để tính toán thời gian đăng bài  
 }
 
 // Cấu hình các section với category ID tương ứng
@@ -32,14 +35,14 @@ const SECTIONS_CONFIG = [
   {
     id: 'featured',
     title: 'Bài viết nổi bật',
-    categoryId: 2, // ID danh mục cho bài viết nổi bật
+    categoryId: 5, // ID danh mục cho bài viết nổi bật
     linkTo: '/category/2'
   },
   {
     id: 'latest',
     title: 'Tin tức mới nhất', 
-    categoryId: 1, // ID danh mục cho tin tức
-    linkTo: '/category/1'
+    // Không cần categoryId cho phần tin tức mới nhất
+    linkTo: '/'
   },
   {
     id: 'knowledge',
@@ -56,45 +59,102 @@ const SECTIONS_CONFIG = [
   {
     id: 'airdrop',
     title: 'Airdrop & Retroactive',
-    categoryId: 5, // ID danh mục cho airdrop
-    linkTo: '/category/5'
+    categoryId: 1, // ID danh mục cho airdrop
+    linkTo: '/category/1'
   }
 ];
 
 export default function Home() {
   // State cho từng section
   const [sectionsData, setSectionsData] = useState<{[key: string]: NewsItem[]}>({});
+  const [allNews, setAllNews] = useState<NewsItem[]>([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Tính toán thời gian đăng bài
+  const calculateTimeAgo = (createdDate: string | undefined): string => {
+    if (!createdDate) return "Gần đây";
+    
+    const created = new Date(createdDate);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return `${diffInSeconds} giây trước`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+    if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)} tháng trước`;
+    return `${Math.floor(diffInSeconds / 31536000)} năm trước`;
+  };
 
   useEffect(() => {
     const fetchAllSectionsData = async () => {
       try {
         setLoading(true);
         
-        // Tạo array các promise để fetch dữ liệu cho từng section
-        const fetchPromises = SECTIONS_CONFIG.map(async (section) => {
-          try {
-            const response = await fetch(
-              `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${section.categoryId}`
-            );
-            const data = await response.json();
+        // Thêm một fetch đặc biệt cho tất cả tin tức
+        const fetchAllNewsPromise = fetch(`http://localhost:5000/api/News/GetNewest`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.statusCode === 1) {
+            // Thêm timeAgo cho mỗi bài viết
+            const newsWithTimeAgo = data.data?.map((item: any) => ({
+              ...item,
+              timeAgo: calculateTimeAgo(item.createdDate)
+            })) || [];
             
+            setAllNews(newsWithTimeAgo);
             return {
-              sectionId: section.id,
-              data: data.statusCode === 1 ? data.data : []
-            };
-          } catch (err) {
-            console.error(`Error fetching data for section ${section.id}:`, err);
-            return {
-              sectionId: section.id,
-              data: []
+              sectionId: 'latest',
+              data: newsWithTimeAgo
             };
           }
+          return {
+            sectionId: 'latest',
+            data: []
+          };
+        })
+        .catch(err => {
+          console.error(`Error fetching all news:`, err);
+          return {
+            sectionId: 'latest',
+            data: []
+          };
         });
+        
+        // Tạo array các promise để fetch dữ liệu cho các section còn lại (trừ 'latest')
+        const fetchPromises = SECTIONS_CONFIG
+          .filter(section => section.id !== 'latest' && section.categoryId) // Bỏ qua 'latest' và các section không có categoryId
+          .map(async (section) => {
+            try {
+              const response = await fetch(
+                `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${section.categoryId}`
+              );
+              const data = await response.json();
+              
+              // Thêm timeAgo cho mỗi bài viết trong category
+              const newsWithTimeAgo = data.statusCode === 1 
+                ? data.data?.map((item: any) => ({
+                    ...item,
+                    timeAgo: calculateTimeAgo(item.createdDate)
+                  })) || []
+                : [];
+              
+              return {
+                sectionId: section.id,
+                data: newsWithTimeAgo
+              };
+            } catch (err) {
+              console.error(`Error fetching data for section ${section.id}:`, err);
+              return {
+                sectionId: section.id,
+                data: []
+              };
+            }
+          });
 
-        // Chờ tất cả request hoàn thành
-        const results = await Promise.all(fetchPromises);
+        // Chờ tất cả request hoàn thành, bao gồm cả fetchAllNewsPromise
+        const results = await Promise.all([fetchAllNewsPromise, ...fetchPromises]);
         
         // Tạo object chứa dữ liệu cho từng section
         const newSectionsData: {[key: string]: NewsItem[]} = {};
@@ -102,6 +162,7 @@ export default function Home() {
           newSectionsData[result.sectionId] = result.data;
         });
         
+        console.log("Dữ liệu các section:", newSectionsData);
         setSectionsData(newSectionsData);
       } catch (err) {
         console.error("Error fetching sections data:", err);
@@ -143,28 +204,31 @@ export default function Home() {
           </div>
         ) : sectionData.length > 0 ? (
           <ScrollableSection title="">
-            {sectionData.map((item: NewsItem, index: number) => (
-              <div key={item.newsID || index} className="transform transition-all duration-300 hover:scale-105">
-                <NewsCard
-                  item={{
-                    id: item.newsID,
-                    title: item.title,
-                    author: item.userName || "",
-                    timeAgo: "", // Provide actual value if available
-                    readTime: item.timeReading ? `${item.timeReading} phút` : "",
-                    image: item.imagesLink || "",
-                    excerpt: item.content?.slice(0, 100) || "",
-                    userName: item.userName || "",
-                    CreatedDate: "", // Provide actual value if available
-                    timeReading: item.timeReading ? `${item.timeReading} phút` : "",
-                    header: "", // Provide actual value if available
-                    newsID: item.newsID,
-                    imagesLink: item.imagesLink || "",
-                    userAvartar: item.avatar || "",
-                  }}
-                />
-              </div>
-            ))}
+            {sectionData.map((item: NewsItem, index: number) => {
+              console.log(`Item in ${config.id}:`, item); // Debug info
+              return (
+                <div key={item.newsID || index} className="transform transition-all duration-300 hover:scale-105">
+                  <NewsCard
+                    item={{
+                      id: item.newsID,
+                      title: item.title || "",
+                      author: item.userName || "",
+                      timeAgo: item.timeAgo || "Gần đây",
+                      readTime: typeof item.timeReading === 'number' ? `${item.timeReading} phút` : "5 phút",
+                      image: item.imagesLink || "",
+                      excerpt: item.content?.slice(0, 100) || "",
+                      userName: item.userName || "",
+                      CreatedDate: item.createdDate || "",
+                      timeReading: typeof item.timeReading === 'number' ? `${item.timeReading}` : "5",
+                      header: item.header || item.title || "",
+                      newsID: item.newsID,
+                      imagesLink: item.imagesLink || "",
+                      userAvartar: item.userAvartar || "", // Đảm bảo truyền đúng trường avatar
+                    }}
+                  />
+                </div>
+              );
+            })}
           </ScrollableSection>
         ) : (
           <div className="text-center py-12 text-gray-500">
