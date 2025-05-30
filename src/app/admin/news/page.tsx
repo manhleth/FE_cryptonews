@@ -17,7 +17,9 @@ import {
   Edit,
   Save,
   X,
-  Loader2
+  Loader2,
+  Star,
+  StarOff
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,6 +76,7 @@ export default function NewsPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedArticles, setSelectedArticles] = useState<number[]>([]);
+  const [featuredNewsIds, setFeaturedNewsIds] = useState<number[]>([]);
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -103,26 +106,22 @@ export default function NewsPage() {
   const { toast } = useToast();
   const { token } = useAuth();
   
-  // Hard-code token từ API (nên thay bằng cách quản lý token hợp lý)
   const valueToken = localStorage.getItem("tokenAdmin");
 
-  // Lấy danh sách tin tức từ API khi component mount
   useEffect(() => {
     fetchNews();
+    fetchFeaturedNews();
   }, []);
 
-  // Filter and search effect
   useEffect(() => {
     let filtered = articles;
 
-    // Filter by publication status
     if (filterType === 'published') {
       filtered = filtered.filter(a => a.published);
     } else if (filterType === 'draft') {
       filtered = filtered.filter(a => !a.published);
     }
 
-    // Search filter
     if (searchTerm) {
       filtered = filtered.filter(a => 
         a.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -135,7 +134,6 @@ export default function NewsPage() {
     setFilteredArticles(filtered);
   }, [articles, filterType, searchTerm]);
 
-  // Clear messages
   useEffect(() => {
     if (error || success) {
       const timer = setTimeout(() => {
@@ -146,7 +144,6 @@ export default function NewsPage() {
     }
   }, [error, success]);
 
-  // Fetch child categories when parent category changes
   useEffect(() => {
     if (selectedCategory && isEditModalOpen) {
       fetchChildCategories(selectedCategory);
@@ -155,7 +152,6 @@ export default function NewsPage() {
     }
   }, [selectedCategory, isEditModalOpen]);
 
-  // Fetch news details when modal opens with a news ID
   useEffect(() => {
     if (isEditModalOpen && selectedNewsId) {
       fetchNewsDetails();
@@ -163,7 +159,6 @@ export default function NewsPage() {
     }
   }, [isEditModalOpen, selectedNewsId]);
 
-  // Hàm gọi API GET để lấy danh sách tin tức
   const fetchNews = async () => {
     setLoading(true);
     try {
@@ -180,16 +175,15 @@ export default function NewsPage() {
       if (result.statusCode !== 1 || !result.data) {
         throw new Error("Lỗi dữ liệu từ API");
       }
-      // Ánh xạ dữ liệu từ API sang kiểu FE, xử lý giá trị null
       const mappedArticles: Article[] = result.data.map((item: any) => ({
         id: item.newsId,
         newsId: item.newsId,
         title: item.title || "",
         content: item.content || "",
-        published: true, // Giả sử tất cả tin tức đã được xuất bản
+        published: true,
         author: item.userName || item.author || "",
         createdAt: item.createdDate || "",
-        views: Math.floor(Math.random() * 10000), // Mock views
+        views: Math.floor(Math.random() * 10000),
         category: item.categoryName || "",
         excerpt: item.header || "",
         image: item.imagesLink || "",
@@ -209,7 +203,21 @@ export default function NewsPage() {
     }
   };
 
-  // Fetch news details
+  const fetchFeaturedNews = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/News/GetFeaturedNews");
+      if (response.ok) {
+        const result = await response.json();
+        if (result.statusCode === 1 && result.data) {
+          const featuredIds = result.data.map((item: any) => item.newsId);
+          setFeaturedNewsIds(featuredIds);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching featured news:", error);
+    }
+  };
+
   const fetchNewsDetails = async () => {
     if (!selectedNewsId) return;
     
@@ -230,7 +238,6 @@ export default function NewsPage() {
       if (result.statusCode === 1 && result.data) {
         const newsData = result.data;
         
-        // Set form values
         setHeader(newsData.header || "");
         setTitle(newsData.title || "");
         setContent(newsData.content || "");
@@ -262,7 +269,6 @@ export default function NewsPage() {
     }
   };
 
-  // Fetch categories
   const fetchCategories = async () => {
     try {
       const response = await fetch("http://localhost:5000/api/Category/GetAllCategories");
@@ -276,7 +282,6 @@ export default function NewsPage() {
     }
   };
 
-  // Fetch child categories
   const fetchChildCategories = async (parentId: string) => {
     try {
       const response = await fetch(
@@ -297,7 +302,6 @@ export default function NewsPage() {
     }
   };
 
-  // Handle image file change
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -331,7 +335,6 @@ export default function NewsPage() {
     if (!confirm("Bạn có chắc muốn xóa những bài viết đã chọn?")) return;
 
     try {
-      // Xóa từng bài viết theo id đã chọn. Có thể dùng Promise.all nếu muốn thực hiện đồng thời.
       await Promise.all(
         selectedArticles.map((id) =>
           fetch(`http://localhost:5000/api/News/AdminDelele?id=${id}`, {
@@ -342,7 +345,6 @@ export default function NewsPage() {
           })
         )
       );
-      // Load lại danh sách sau khi xóa
       fetchNews();
       setSuccess(`Đã xóa ${selectedArticles.length} bài viết thành công!`);
       setSelectedArticles([]);
@@ -351,7 +353,6 @@ export default function NewsPage() {
     }
   };
 
-  // Hàm xoá bài viết
   const handleDelete = async (id: number) => {
     if (!confirm("Bạn có chắc muốn xóa bài viết này?")) return;
     try {
@@ -364,7 +365,6 @@ export default function NewsPage() {
       if (!response.ok) {
         throw new Error("Lỗi khi xóa bài viết");
       }
-      // Cập nhật lại danh sách sau khi xóa thành công
       setArticles(articles.filter((article) => article.id !== id));
       toast({
         title: "Thành công",
@@ -382,17 +382,61 @@ export default function NewsPage() {
     }
   };
 
-  // Hàm mở modal sửa bài viết
+  const handleToggleFeatured = async (newsId: number) => {
+    const isFeatured = featuredNewsIds.includes(newsId);
+    
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/News/SetFeaturedNews?newsId=${newsId}&isFeatured=${!isFeatured}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${valueToken}`,
+          },
+        }
+      );
+      
+      const result = await response.json();
+      
+      if (result.statusCode === 1) {
+        toast({
+          title: "Thành công",
+          description: isFeatured ? "Đã bỏ chọn bài viết nổi bật" : "Đã chọn bài viết nổi bật",
+          duration: 3000
+        });
+        
+        if (isFeatured) {
+          setFeaturedNewsIds(prev => prev.filter(id => id !== newsId));
+        } else {
+          setFeaturedNewsIds(prev => [...prev, newsId]);
+        }
+      } else {
+        toast({
+          title: "Lỗi",
+          description: result.data || "Không thể cập nhật bài viết nổi bật",
+          variant: "destructive",
+          duration: 3000
+        });
+      }
+    } catch (error) {
+      console.error("Error toggling featured:", error);
+      toast({
+        title: "Lỗi",
+        description: "Có lỗi xảy ra khi cập nhật",
+        variant: "destructive",
+        duration: 3000
+      });
+    }
+  };
+
   const handleEdit = (id: number) => {
     setSelectedNewsId(id);
     setIsEditModalOpen(true);
   };
 
-  // Hàm đóng modal và reset state
   const handleCloseEditModal = () => {
     setIsEditModalOpen(false);
     setSelectedNewsId(null);
-    // Reset form state
     setHeader("");
     setTitle("");
     setContent("");
@@ -406,11 +450,9 @@ export default function NewsPage() {
     setImagePreview(null);
   };
 
-  // Handle form submission
   const handleSubmit = async () => {
     if (!selectedNewsId) return;
     
-    // Validate form
     if (!header.trim() || !title.trim() || !content.trim() || !footer.trim() || !timeReading) {
       toast({
         title: "Thiếu thông tin",
@@ -424,7 +466,6 @@ export default function NewsPage() {
     setSubmitting(true);
     
     try {
-      // If there's a new image, upload it first
       let finalImageUrl = imageUrl;
       
       if (imageFile) {
@@ -451,7 +492,6 @@ export default function NewsPage() {
         }
       }
       
-      // Prepare data for API
       const newsData = {
         header,
         title,
@@ -464,7 +504,6 @@ export default function NewsPage() {
         imagesLink: finalImageUrl
       };
       
-      // Update news via API
       const response = await fetch(`http://localhost:5000/api/News/UpdateNews?id=${selectedNewsId}`, {
         method: "PUT",
         headers: {
@@ -487,10 +526,7 @@ export default function NewsPage() {
           duration: 3000
         });
         
-        // Refresh news list
         fetchNews();
-        
-        // Close the modal
         handleCloseEditModal();
       } else {
         throw new Error(result.message || "Lỗi không xác định");
@@ -563,8 +599,10 @@ export default function NewsPage() {
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-500">Tổng số</p>
-            <p className="text-2xl font-bold text-emerald-600">{articles.length}</p>
+            <p className="text-sm text-gray-500">Tổng số / Nổi bật</p>
+            <p className="text-2xl font-bold text-emerald-600">
+              {articles.length} / {featuredNewsIds.length}
+            </p>
           </div>
         </div>
       </div>
@@ -586,7 +624,6 @@ export default function NewsPage() {
       {/* Filters and Actions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-          {/* Search and Filter */}
           <div className="flex flex-1 space-x-4">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -612,7 +649,6 @@ export default function NewsPage() {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex space-x-3">
             <button
               onClick={handleBulkDelete}
@@ -628,109 +664,123 @@ export default function NewsPage() {
 
       {/* Articles Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredArticles.map((article) => (
-          <div key={article.id} className="border border-gray-200 hover:border-emerald-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
-            {/* Ảnh bài viết */}
-            <div className="relative w-full h-48 overflow-hidden">
-              {article.image ? (
+        {filteredArticles.map((article) => {
+          const isFeatured = featuredNewsIds.includes(article.newsId);
+          
+          return (
+            <div key={article.id} className="border border-gray-200 hover:border-emerald-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
+              <div className="relative w-full h-[160px] overflow-hidden">
                 <img
-                  src={article.image}
-                  alt={article.title}
-                  className="w-full h-full object-cover"
+                  src={article.imagesLink || "/placeholder/400/250.jpg"}
+                  alt={article.header || article.title}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-200">
-                  <FileText className="w-12 h-12 text-gray-400" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                
+                <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-700 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                  <Eye size={12} />
+                  1.2k
                 </div>
-              )}
+                
+                {isFeatured && (
+                  <div className="absolute top-3 left-3 bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                    <Star size={12} className="fill-current" />
+                    Nổi bật
+                  </div>
+                )}
+              </div>
               
-              {/* Checkbox overlay */}
-              <div className="absolute top-3 left-3">
-                <input
-                  type="checkbox"
-                  checked={selectedArticles.includes(article.id)}
-                  onChange={(e) => handleSelectChange(article.id, e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 bg-white border-gray-300 rounded focus:ring-emerald-500"
-                />
-              </div>
-
-              {/* Status badge */}
-              <div className="absolute top-3 right-3">
-                {getStatusBadge(article.published)}
-              </div>
-            </div>
-            
-            {/* Nội dung */}
-            <div className="p-6 flex-1 flex flex-col">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-emerald-600 font-medium">#{article.id}</span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="p-1 hover:bg-gray-100 rounded">
-                      <MoreVertical className="w-4 h-4 text-gray-600" />
+              <div className="p-4 flex-1 flex flex-col">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-emerald-600 font-medium">#{article.id}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleFeatured(article.newsId);
+                      }}
+                      className={`p-1.5 rounded-full transition-colors ${
+                        isFeatured 
+                          ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' 
+                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                      }`}
+                      title={isFeatured ? "Bỏ chọn nổi bật" : "Chọn làm nổi bật"}
+                    >
+                      {isFeatured ? (
+                        <Star size={16} className="fill-current" />
+                      ) : (
+                        <StarOff size={16} />
+                      )}
                     </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem 
-                      onClick={() => handleEdit(article.newsId)}
-                      className="flex items-center space-x-2 cursor-pointer"
-                    >
-                      <Edit className="w-4 h-4" />
-                      <span>Chỉnh sửa</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
-                      <Eye className="w-4 h-4" />
-                      <span>Xem chi tiết</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleDelete(article.id)}
-                      className="flex items-center space-x-2 text-red-600 focus:text-red-600 cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>Xóa bài viết</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-
-              <h3 className="text-lg font-semibold mb-2 line-clamp-2">
-                {article.title}
-              </h3>
-              
-              {article.excerpt && (
-                <p className="text-sm text-gray-600 mb-3 line-clamp-3 flex-1">
-                  {article.excerpt}
-                </p>
-              )}
-              
-              {/* Meta info */}
-              <div className="space-y-2 mt-auto pt-3 border-t border-gray-100">
-                <div className="flex items-center text-xs text-gray-500">
-                  <User className="w-3 h-3 mr-1" />
-                  <span>{article.author || 'Unknown'}</span>
-                  <span className="mx-2">•</span>
-                  <Calendar className="w-3 h-3 mr-1" />
-                  <span>{formatDate(article.createdAt || "")}</span>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1 hover:bg-gray-100 rounded">
+                          <MoreVertical className="w-4 h-4 text-gray-600" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => handleEdit(article.newsId)}
+                          className="flex items-center space-x-2 cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                          <span>Chỉnh sửa</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
+                          <Eye className="w-4 h-4" />
+                          <span>Xem chi tiết</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleDelete(article.id)}
+                          className="flex items-center space-x-2 text-red-600 focus:text-red-600 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Xóa bài viết</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
 
-                {article.category && (
-                  <div className="flex items-center text-xs text-gray-500">
-                    <span className="px-2 py-1 bg-gray-100 rounded-full">
-                      {article.category}
-                    </span>
-                  </div>
+                <h3 className="text-lg font-semibold mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                  {article.title}
+                </h3>
+                
+                {article.excerpt && (
+                  <p className="text-sm text-gray-600 line-clamp-3 mb-3 flex-1">
+                    {article.excerpt}
+                  </p>
                 )}
+                
+                <div className="space-y-2 mt-auto pt-3 border-t border-gray-100">
+                  <div className="flex items-center text-xs text-gray-500">
+                    <User className="h-3.5 w-3.5 mr-1" />
+                    <span>{article.author || 'Unknown'}</span>
+                    <span className="mx-2">•</span>
+                    <Calendar className="h-3.5 w-3.5 mr-1" />
+                    <span>{formatDate(article.createdAt || "")}</span>
+                  </div>
 
-                {article.views !== undefined && (
-                  <div className="flex items-center text-xs text-gray-500">
-                    <TrendingUp className="w-3 h-3 mr-1" />
-                    <span>{article.views.toLocaleString()} lượt xem</span>
-                  </div>
-                )}
+                  {article.category && (
+                    <div className="flex items-center text-xs text-gray-500">
+                      <span className="px-2 py-1 bg-gray-100 rounded-full">
+                        {article.category}
+                      </span>
+                    </div>
+                  )}
+
+                  {article.views !== undefined && (
+                    <div className="flex items-center text-xs text-gray-500">
+                      <TrendingUp className="h-3.5 w-3.5 mr-1" />
+                      <span>{article.views.toLocaleString()} lượt xem</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Empty state */}

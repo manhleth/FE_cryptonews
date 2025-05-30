@@ -35,32 +35,32 @@ const SECTIONS_CONFIG = [
   {
     id: 'featured',
     title: 'Bài viết nổi bật',
-    categoryId: 5, // ID danh mục cho bài viết nổi bật
-    linkTo: '/category/2'
+    // Không cần categoryId nữa, sẽ gọi API riêng
+    linkTo: '/category/0',
+    isFeatured: true 
   },
   {
     id: 'latest',
     title: 'Tin tức mới nhất', 
-    // Không cần categoryId cho phần tin tức mới nhất
     linkTo: '/'
   },
   {
     id: 'knowledge',
     title: 'Kiến thức',
-    categoryId: 4, // ID danh mục cho kiến thức
-    linkTo: '/category/4'
+    categoryId: 3, 
+    linkTo: '/category/3'
   },
   {
     id: 'analysis',
     title: 'Phân tích thị trường',
-    categoryId: 3, // ID danh mục cho phân tích
-    linkTo: '/category/3'
+    categoryId: 4, 
+    linkTo: '/category/4'
   },
   {
     id: 'airdrop',
     title: 'Airdrop & Retroactive',
-    categoryId: 1, // ID danh mục cho airdrop
-    linkTo: '/category/1'
+    categoryId: 2,
+    linkTo: '/category/2'
   }
 ];
 
@@ -92,88 +92,178 @@ export default function Home() {
       try {
         setLoading(true);
         
-        // Thêm một fetch đặc biệt cho tất cả tin tức
-        const fetchAllNewsPromise = fetch(`http://localhost:5000/api/News/GetNewest`)
-        .then(response => response.json())
-        .then(data => {
-          console.log("API Response for GetNewest:", data); // Debug log
-          if (data.statusCode === 1) {
-            // Map dữ liệu từ API với các trường đúng
-            const newsWithTimeAgo = data.data?.map((item: any) => {
-              console.log("Individual news item:", item); // Debug log cho từng item
-              return {
-                newsID: item.newsId, // Backend trả về newsId
-                header: item.header,
-                title: item.title,
-                content: item.content,
-                imagesLink: item.imagesLink,
-                userName: item.userName, // Backend đã sửa để trả về userName
-                userAvartar: item.avatar, // Backend đã sửa để trả về avatar
-                timeReading: item.timeReading || 5,
-                categoryId: item.categoryId,
-                childrenCategoryID: item.childrenCategoryId,
-                createdDate: item.createdDate,
-                timeAgo: calculateTimeAgo(item.createdDate)
-              };
-            }) || [];
+        // Fetch bài viết nổi bật
+        const fetchFeaturedPromise = fetch(`http://localhost:5000/api/News/GetFeaturedNews`)
+          .then(async response => {
+            console.log("Featured news response status:", response.status);
             
-            console.log("Mapped news data:", newsWithTimeAgo); // Debug log
-            setAllNews(newsWithTimeAgo);
+            if (!response.ok) {
+              console.error("Featured news response not OK:", response.status, response.statusText);
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const text = await response.text();
+            console.log("Featured news raw response:", text.substring(0, 200) + "...");
+            
+            try {
+              const data = JSON.parse(text);
+              console.log("Featured news parsed data:", data);
+              
+              if (data.statusCode === 1) {
+                const newsWithTimeAgo = data.data?.map((item: any) => ({
+                  newsID: item.newsId,
+                  header: item.header,
+                  title: item.title,
+                  content: item.content,
+                  imagesLink: item.imagesLink,
+                  userName: item.userName,
+                  userAvartar: item.avatar,
+                  timeReading: item.timeReading || 5,
+                  categoryId: item.categoryId,
+                  childrenCategoryID: item.childrenCategoryId,
+                  createdDate: item.createdDate,
+                  timeAgo: calculateTimeAgo(item.createdDate)
+                })) || [];
+                
+                return {
+                  sectionId: 'featured',
+                  data: newsWithTimeAgo
+                };
+              }
+              return {
+                sectionId: 'featured',
+                data: []
+              };
+            } catch (parseError) {
+              console.error("Error parsing featured news JSON:", parseError);
+              console.error("Raw response that failed to parse:", text);
+              throw parseError;
+            }
+          })
+          .catch(err => {
+            console.error(`Error fetching featured news:`, err);
+            return {
+              sectionId: 'featured',
+              data: []
+            };
+          });
+        
+        // Fetch latest news
+        const fetchAllNewsPromise = fetch(`http://localhost:5000/api/News/GetNewest`)
+          .then(async response => {
+            console.log("Latest news response status:", response.status);
+            
+            if (!response.ok) {
+              console.error("Latest news response not OK:", response.status, response.statusText);
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const text = await response.text();
+            console.log("Latest news raw response:", text.substring(0, 200) + "...");
+            
+            try {
+              const data = JSON.parse(text);
+              console.log("API Response for GetNewest:", data); // Debug log
+              
+              if (data.statusCode === 1) {
+                // Map dữ liệu từ API với các trường đúng
+                const newsWithTimeAgo = data.data?.map((item: any) => {
+                  console.log("Individual news item:", item); // Debug log cho từng item
+                  return {
+                    newsID: item.newsId, // Backend trả về newsId
+                    header: item.header,
+                    title: item.title,
+                    content: item.content,
+                    imagesLink: item.imagesLink,
+                    userName: item.userName, // Backend đã sửa để trả về userName
+                    userAvartar: item.avatar, // Backend đã sửa để trả về avatar
+                    timeReading: item.timeReading || 5,
+                    categoryId: item.categoryId,
+                    childrenCategoryID: item.childrenCategoryId,
+                    createdDate: item.createdDate,
+                    timeAgo: calculateTimeAgo(item.createdDate)
+                  };
+                }) || [];
+                
+                console.log("Mapped news data:", newsWithTimeAgo); // Debug log
+                setAllNews(newsWithTimeAgo);
+                return {
+                  sectionId: 'latest',
+                  data: newsWithTimeAgo
+                };
+              }
+              return {
+                sectionId: 'latest',
+                data: []
+              };
+            } catch (parseError) {
+              console.error("Error parsing latest news JSON:", parseError);
+              console.error("Raw response that failed to parse:", text);
+              throw parseError;
+            }
+          })
+          .catch(err => {
+            console.error(`Error fetching all news:`, err);
             return {
               sectionId: 'latest',
-              data: newsWithTimeAgo
+              data: []
             };
-          }
-          return {
-            sectionId: 'latest',
-            data: []
-          };
-        })
-        .catch(err => {
-          console.error(`Error fetching all news:`, err);
-          return {
-            sectionId: 'latest',
-            data: []
-          };
-        });
+          });
         
-        // Tạo array các promise để fetch dữ liệu cho các section còn lại (trừ 'latest')
+        // Fetch các section khác (có categoryId)
         const fetchPromises = SECTIONS_CONFIG
-          .filter(section => section.id !== 'latest' && section.categoryId) // Bỏ qua 'latest' và các section không có categoryId
+          .filter(section => section.id !== 'latest' && section.id !== 'featured' && section.categoryId)
           .map(async (section) => {
             try {
               const response = await fetch(
                 `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${section.categoryId}`
               );
-              const data = await response.json();
-              console.log(`API Response for ${section.id}:`, data); // Debug log
               
-              // Map dữ liệu từ API với các trường đúng
-              const newsWithTimeAgo = data.statusCode === 1 
-                ? data.data?.map((item: any) => {
-                    console.log(`Individual item for ${section.id}:`, item); // Debug log
-                    return {
-                      newsID: item.newsID, // API trả về newsID với chữ D viết hoa
-                      header: item.header,
-                      title: item.title,
-                      content: item.title, // Sử dụng title làm content tạm thời
-                      imagesLink: item.imagesLink,
-                      userName: item.userName, // API trả về userName
-                      userAvartar: item.userAvartar, // API trả về userAvartar
-                      timeReading: parseInt(item.timeReading) || 5,
-                      categoryId: section.categoryId,
-                      timeAgo: item.timeAgo || calculateTimeAgo(item.createdDate),
-                      createdDate: item.createdDate
-                    };
-                  }) || []
-                : [];
+              console.log(`${section.id} response status:`, response.status);
               
-              console.log(`Mapped data for ${section.id}:`, newsWithTimeAgo); // Debug log
+              if (!response.ok) {
+                console.error(`${section.id} response not OK:`, response.status, response.statusText);
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
               
-              return {
-                sectionId: section.id,
-                data: newsWithTimeAgo
-              };
+              const text = await response.text();
+              console.log(`${section.id} raw response:`, text.substring(0, 200) + "...");
+              
+              try {
+                const data = JSON.parse(text);
+                console.log(`API Response for ${section.id}:`, data); // Debug log
+                
+                // Map dữ liệu từ API với các trường đúng
+                const newsWithTimeAgo = data.statusCode === 1 
+                  ? data.data?.map((item: any) => {
+                      console.log(`Individual item for ${section.id}:`, item); // Debug log
+                      return {
+                        newsID: item.newsID, // API trả về newsID với chữ D viết hoa
+                        header: item.header,
+                        title: item.title,
+                        content: item.title, // Sử dụng title làm content tạm thời
+                        imagesLink: item.imagesLink,
+                        userName: item.userName, // API trả về userName
+                        userAvartar: item.userAvartar, // API trả về userAvartar
+                        timeReading: parseInt(item.timeReading) || 5,
+                        categoryId: section.categoryId,
+                        timeAgo: item.timeAgo || calculateTimeAgo(item.createdDate),
+                        createdDate: item.createdDate
+                      };
+                    }) || []
+                  : [];
+                
+                console.log(`Mapped data for ${section.id}:`, newsWithTimeAgo); // Debug log
+                
+                return {
+                  sectionId: section.id,
+                  data: newsWithTimeAgo
+                };
+              } catch (parseError) {
+                console.error(`Error parsing ${section.id} JSON:`, parseError);
+                console.error(`Raw response that failed to parse for ${section.id}:`, text);
+                throw parseError;
+              }
             } catch (err) {
               console.error(`Error fetching data for section ${section.id}:`, err);
               return {
@@ -183,8 +273,8 @@ export default function Home() {
             }
           });
 
-        // Chờ tất cả request hoàn thành, bao gồm cả fetchAllNewsPromise
-        const results = await Promise.all([fetchAllNewsPromise, ...fetchPromises]);
+        // Chờ tất cả request hoàn thành
+        const results = await Promise.all([fetchFeaturedPromise, fetchAllNewsPromise, ...fetchPromises]);
         
         // Tạo object chứa dữ liệu cho từng section
         const newSectionsData: {[key: string]: NewsItem[]} = {};
@@ -208,11 +298,17 @@ export default function Home() {
   // Component để render từng section
   const SectionComponent = ({ config }: { config: typeof SECTIONS_CONFIG[0] }) => {
     const sectionData = sectionsData[config.id] || [];
+    const isFeatured = config.id === 'featured';
     
     return (
-      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+      <section className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-8 ${
+        isFeatured ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200' : ''
+      }`}>
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">{config.title}</h2>
+          <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            {isFeatured && <Star className="w-8 h-8 text-yellow-500 fill-current" />}
+            {config.title}
+          </h2>
           <Link href={config.linkTo}>
             <div className="flex items-center text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium group transition-colors">
               <span>Xem tất cả</span>
@@ -233,33 +329,78 @@ export default function Home() {
             ))}
           </div>
         ) : sectionData.length > 0 ? (
-          <ScrollableSection title="">
-            {sectionData.map((item: NewsItem, index: number) => {
-              console.log(`Rendering item for ${config.id}:`, item); // Debug info
-              return (
-                <div key={item.newsID || index} className="transform transition-all duration-300 hover:scale-105">
-                  <NewsCard
-                    item={{
-                      id: item.newsID,
-                      title: item.title || "",
-                      author: item.userName || "",
-                      timeAgo: item.timeAgo || "Gần đây",
-                      readTime: typeof item.timeReading === 'number' ? `${item.timeReading} phút` : "5 phút",
-                      image: item.imagesLink || "",
-                      excerpt: item.content?.slice(0, 100) || item.title?.slice(0, 100) || "",
-                      userName: item.userName || "",
-                      CreatedDate: item.createdDate || "",
-                      timeReading: typeof item.timeReading === 'number' ? `${item.timeReading}` : "5",
-                      header: item.header || item.title || "",
-                      newsID: item.newsID,
-                      imagesLink: item.imagesLink || "",
-                      userAvartar: item.userAvartar || "", // Truyền đúng trường avatar
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </ScrollableSection>
+          <div className={isFeatured ? "grid grid-cols-1 md:grid-cols-3 gap-6" : ""}>
+            {isFeatured ? (
+              // Layout đặc biệt cho bài viết nổi bật - hiển thị tối đa 3 bài
+              sectionData.slice(0, 3).map((item: NewsItem, index: number) => (
+                <Link key={item.newsID || index} href={`/news/${item.newsID}`}>
+                  <div className="group cursor-pointer h-full">
+                    <div className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 h-full flex flex-col border border-yellow-200">
+                      <div className="relative h-48 overflow-hidden">
+                        <img
+                          src={item.imagesLink || "/placeholder/400/250.jpg"}
+                          alt={item.header || item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute top-3 right-3 bg-yellow-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                          <Star size={12} className="fill-current" />
+                          Nổi bật
+                        </div>
+                      </div>
+                      <div className="p-4 flex-1 flex flex-col">
+                        <h3 className="font-bold text-lg mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                          {item.header || item.title}
+                        </h3>
+                        <p className="text-sm text-gray-600 line-clamp-2 mb-3 flex-1">
+                          {item.content?.slice(0, 100) || item.title?.slice(0, 100)}...
+                        </p>
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={item.userAvartar || "/placeholder/20/20"}
+                              alt={item.userName}
+                              className="w-5 h-5 rounded-full"
+                            />
+                            <span>{item.userName || "Unknown"}</span>
+                          </div>
+                          <span>{item.timeReading} phút đọc</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              // Layout bình thường cho các section khác
+              <ScrollableSection title="">
+                {sectionData.map((item: NewsItem, index: number) => {
+                  console.log(`Rendering item for ${config.id}:`, item); // Debug info
+                  return (
+                    <div key={item.newsID || index} className="transform transition-all duration-300 hover:scale-105">
+                      <NewsCard
+                        item={{
+                          id: item.newsID,
+                          title: item.title || "",
+                          author: item.userName || "",
+                          timeAgo: item.timeAgo || "Gần đây",
+                          readTime: typeof item.timeReading === 'number' ? `${item.timeReading} phút` : "5 phút",
+                          image: item.imagesLink || "",
+                          excerpt: item.content?.slice(0, 100) || item.title?.slice(0, 100) || "",
+                          userName: item.userName || "",
+                          CreatedDate: item.createdDate || "",
+                          timeReading: typeof item.timeReading === 'number' ? `${item.timeReading}` : "5",
+                          header: item.header || item.title || "",
+                          newsID: item.newsID,
+                          imagesLink: item.imagesLink || "",
+                          userAvartar: item.userAvartar || "", // Truyền đúng trường avatar
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </ScrollableSection>
+            )}
+          </div>
         ) : (
           <div className="text-center py-12 text-gray-500">
             <p>Chưa có bài viết nào trong danh mục này</p>
