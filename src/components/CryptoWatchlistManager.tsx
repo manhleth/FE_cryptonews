@@ -84,9 +84,22 @@ export const CryptoWatchlistManager = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
+  // Debug logs
+  useEffect(() => {
+    console.log('CryptoWatchlistManager mounted');
+    console.log('User:', user);
+    console.log('Token:', token ? 'exists' : 'missing');
+  }, [user, token]);
+
   // Fetch user's watchlist
   const fetchWatchlist = async () => {
-    if (!user || !token) return;
+    if (!user || !token) {
+      console.log('No user or token, skipping watchlist fetch');
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log('Fetching watchlist for user:', user.userId);
     
     try {
       const response = await fetch(
@@ -99,34 +112,64 @@ export const CryptoWatchlistManager = () => {
         }
       );
       
-      if (!response.ok) throw new Error('Failed to fetch watchlist');
+      console.log('Watchlist response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch watchlist: ${response.status}`);
+      }
       
       const result = await response.json();
+      console.log('Watchlist API response:', result);
       
-      if (result && Array.isArray(result)) {
-        setWatchlist(result);
+      if (result && result.statusCode === 1 && Array.isArray(result.data)) {
+        setWatchlist(result.data);
+        console.log('Watchlist set successfully:', result.data);
         
         // Fetch prices for watchlist coins
+        if (result.data.length > 0) {
+          const coinIds = result.data.map((item: WatchlistItem) => item.coinId).join(',');
+          await fetchCoinPrices(coinIds);
+        }
+      } else if (Array.isArray(result)) {
+        // Nếu API trả về array trực tiếp
+        setWatchlist(result);
+        console.log('Watchlist set successfully (direct array):', result);
+        
         if (result.length > 0) {
           const coinIds = result.map((item: WatchlistItem) => item.coinId).join(',');
-          fetchCoinPrices(coinIds);
+          await fetchCoinPrices(coinIds);
         }
+      } else {
+        console.log('No watchlist data found, setting empty array');
+        setWatchlist([]);
       }
     } catch (error) {
       console.error('Error fetching watchlist:', error);
+      toast({
+        title: "Lỗi",
+        description: "Không thể tải danh sách watchlist",
+        variant: "destructive",
+        duration: 3000
+      });
     }
   };
 
   // Fetch coin prices
   const fetchCoinPrices = async (coinIds: string) => {
+    console.log('Fetching prices for coins:', coinIds);
+    
     try {
       const response = await fetch(
         `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&ids=${coinIds}&order=market_cap_desc&sparkline=false&price_change_percentage=24h,7d`
       );
       
-      if (!response.ok) throw new Error('Failed to fetch prices');
+      if (!response.ok) {
+        throw new Error('Failed to fetch prices');
+      }
       
       const data = await response.json();
+      console.log('Coin prices data:', data);
+      
       const pricesMap: {[key: string]: CoinData} = {};
       
       data.forEach((coin: CoinData) => {
@@ -134,8 +177,38 @@ export const CryptoWatchlistManager = () => {
       });
       
       setCoinPrices(pricesMap);
+      console.log('Coin prices set:', pricesMap);
     } catch (error) {
       console.error('Error fetching coin prices:', error);
+      
+      // Fallback to mock data
+      const mockPrices: {[key: string]: CoinData} = {
+        'bitcoin': {
+          id: 'bitcoin',
+          symbol: 'btc',
+          name: 'Bitcoin',
+          image: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
+          current_price: 42500,
+          price_change_percentage_24h: 2.5,
+          price_change_percentage_7d: 5.2,
+          market_cap: 830000000000,
+          market_cap_rank: 1,
+          total_volume: 15800000000
+        },
+        'ethereum': {
+          id: 'ethereum',
+          symbol: 'eth',
+          name: 'Ethereum',
+          image: 'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
+          current_price: 2850,
+          price_change_percentage_24h: -1.2,
+          price_change_percentage_7d: 3.8,
+          market_cap: 340000000000,
+          market_cap_rank: 2,
+          total_volume: 8900000000
+        }
+      };
+      setCoinPrices(mockPrices);
     }
   };
 
@@ -146,12 +219,44 @@ export const CryptoWatchlistManager = () => {
         `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`
       );
       
-      if (!response.ok) throw new Error('Failed to fetch coins');
+      if (!response.ok) {
+        throw new Error('Failed to fetch coins');
+      }
       
       const data = await response.json();
       setAllCoins(data);
+      console.log('All coins fetched:', data.length);
     } catch (error) {
       console.error('Error fetching all coins:', error);
+      
+      // Fallback to mock data
+      const mockCoins = [
+        {
+          id: 'bitcoin',
+          symbol: 'btc',
+          name: 'Bitcoin',
+          image: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
+          current_price: 42500,
+          price_change_percentage_24h: 2.5,
+          price_change_percentage_7d: 5.2,
+          market_cap: 830000000000,
+          market_cap_rank: 1,
+          total_volume: 15800000000
+        },
+        {
+          id: 'ethereum',
+          symbol: 'eth',
+          name: 'Ethereum',
+          image: 'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
+          current_price: 2850,
+          price_change_percentage_24h: -1.2,
+          price_change_percentage_7d: 3.8,
+          market_cap: 340000000000,
+          market_cap_rank: 2,
+          total_volume: 8900000000
+        }
+      ];
+      setAllCoins(mockCoins);
     }
   };
 
@@ -170,6 +275,8 @@ export const CryptoWatchlistManager = () => {
         order: watchlist.length + 1
       };
       
+      console.log('Adding to watchlist:', watchlistData);
+      
       const response = await fetch(
         `http://localhost:5000/api/Watchlist/AddToWatchlist?userId=${user.userId}`,
         {
@@ -182,7 +289,12 @@ export const CryptoWatchlistManager = () => {
         }
       );
       
-      if (!response.ok) throw new Error('Failed to add to watchlist');
+      if (!response.ok) {
+        throw new Error('Failed to add to watchlist');
+      }
+      
+      const result = await response.json();
+      console.log('Add to watchlist result:', result);
       
       await fetchWatchlist();
       toast({
@@ -222,7 +334,9 @@ export const CryptoWatchlistManager = () => {
         }
       );
       
-      if (!response.ok) throw new Error('Failed to remove from watchlist');
+      if (!response.ok) {
+        throw new Error('Failed to remove from watchlist');
+      }
       
       await fetchWatchlist();
       toast({
@@ -276,13 +390,26 @@ export const CryptoWatchlistManager = () => {
 
   // Load data when component mounts
   useEffect(() => {
-    if (user && token) {
+    console.log('Initial load effect triggered');
+    
+    const loadData = async () => {
       setIsLoading(true);
-      Promise.all([
-        fetchWatchlist(),
-        fetchAllCoins()
-      ]).finally(() => setIsLoading(false));
-    }
+      
+      if (user && token) {
+        console.log('User and token available, fetching data');
+        await Promise.all([
+          fetchWatchlist(),
+          fetchAllCoins()
+        ]);
+      } else {
+        console.log('No user or token, just fetching coins');
+        await fetchAllCoins();
+      }
+      
+      setIsLoading(false);
+    };
+    
+    loadData();
   }, [user, token]);
 
   // Auto refresh prices every 30 seconds
@@ -296,6 +423,15 @@ export const CryptoWatchlistManager = () => {
       return () => clearInterval(interval);
     }
   }, [watchlist]);
+
+  console.log('Current state:', {
+    user: !!user,
+    token: !!token,
+    isLoading,
+    watchlistLength: watchlist.length,
+    allCoinsLength: allCoins.length,
+    coinPricesKeys: Object.keys(coinPrices)
+  });
 
   if (!user) {
     return (
@@ -347,7 +483,7 @@ export const CryptoWatchlistManager = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => fetchWatchlist()}
+                onClick={fetchWatchlist}
                 className="h-9"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />

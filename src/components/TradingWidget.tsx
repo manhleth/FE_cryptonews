@@ -1,9 +1,9 @@
 // src/components/TradingWidget.tsx
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Star, TrendingUp, TrendingDown, Eye, EyeOff, Settings, Plus, RefreshCw, Loader2 } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, Eye, EyeOff, Settings, Plus, RefreshCw, Loader2, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import Link from 'next/link';
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { cryptoAPI } from "@/services/cryptoApi";
 
 interface CoinData {
   id: string;
@@ -26,6 +27,7 @@ interface CoinData {
   total_volume: number;
   market_cap: number;
   market_cap_rank: number;
+  error?: boolean;
 }
 
 interface WatchlistItem {
@@ -39,8 +41,6 @@ interface WatchlistItem {
   isActive: boolean;
   createdDate: string;
 }
-
-const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
 
 export const TradingWidget = () => {
   const { user, token } = useAuth();
@@ -56,79 +56,77 @@ export const TradingWidget = () => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'limited'>('online');
+  const [retryCount, setRetryCount] = useState(0);
+  const [maxRetries] = useState(3);
 
-  // Fetch coins data từ CoinGecko
-  const fetchCoins = async () => {
-    setIsLoading(true);
+  // Debounced refresh để tránh spam requests
+  const [refreshDebounced, setRefreshDebounced] = useState(false);
+
+  // Fetch coins data với error handling tốt hơn
+  const fetchCoins = useCallback(async (showLoading = true) => {
+    if (refreshDebounced) return;
+    
+    if (showLoading) setIsLoading(true);
+    setRefreshDebounced(true);
+    
     try {
-      const response = await fetch(
-        `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h`,
-        {
-          headers: {
-            'Accept': 'application/json',
-          }
+      setConnectionStatus('online');
+      const data = await cryptoAPI.getTopCoins(100);
+      
+      if (data && data.length > 0) {
+        setCoins(data);
+        setLastUpdate(new Date());
+        setRetryCount(0);
+        
+        // Check if data contains error flag (fallback data)
+        if (data[0]?.error) {
+          setConnectionStatus('limited');
+          toast({
+            title: "Dữ liệu giới hạn",
+            description: "Đang sử dụng dữ liệu dự phòng do giới hạn API",
+            duration: 3000
+          });
         }
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch data');
+      } else {
+        throw new Error('No data received');
       }
-      
-      const data = await response.json();
-      setCoins(data);
-      setLastUpdate(new Date());
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching coins:', error);
-      // Fallback to mock data on error
-      fetchMockData();
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fallback mock data
-  const fetchMockData = () => {
-    const mockData = [
-      {
-        id: 'bitcoin',
-        symbol: 'btc',
-        name: 'Bitcoin',
-        image: 'https://assets.coingecko.com/coins/images/1/large/bitcoin.png',
-        current_price: 42500.32,
-        price_change_percentage_24h: 2.45,
-        total_volume: 15800000000,
-        market_cap: 830000000000,
-        market_cap_rank: 1
-      },
-      {
-        id: 'ethereum',
-        symbol: 'eth',
-        name: 'Ethereum',
-        image: 'https://assets.coingecko.com/coins/images/279/large/ethereum.png',
-        current_price: 2850.75,
-        price_change_percentage_24h: -1.23,
-        total_volume: 8900000000,
-        market_cap: 340000000000,
-        market_cap_rank: 2
-      },
-      {
-        id: 'binancecoin',
-        symbol: 'bnb',
-        name: 'BNB',
-        image: 'https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png',
-        current_price: 315.42,
-        price_change_percentage_24h: 0.87,
-        total_volume: 1200000000,
-        market_cap: 48000000000,
-        market_cap_rank: 4
+      setRetryCount(prev => prev + 1);
+      
+      if (error.message === 'RATE_LIMITED') {
+        setConnectionStatus('limited');
+        toast({
+          title: "Giới hạn API",
+          description: "Đã đạt giới hạn request. Thử lại sau vài phút.",
+          variant: "destructive",
+          duration: 5000
+        });
+      } else if (retryCount < maxRetries) {
+        setConnectionStatus('limited');
+        // Retry với delay tăng dần
+        setTimeout(() => {
+          fetchCoins(false);
+        }, Math.pow(2, retryCount) * 2000);
+      } else {
+        setConnectionStatus('offline');
+        toast({
+          title: "Không thể kết nối",
+          description: "Không thể lấy dữ liệu giá coin. Kiểm tra kết nối mạng.",
+          variant: "destructive",
+          duration: 5000
+        });
       }
-    ];
-    setCoins(mockData);
-    setLastUpdate(new Date());
-  };
+    } finally {
+      if (showLoading) setIsLoading(false);
+      // Reset debounce sau 2 giây
+      setTimeout(() => setRefreshDebounced(false), 2000);
+    }
+  }, [refreshDebounced, retryCount, maxRetries, toast]);
 
   // Fetch user's watchlist từ database
-  const fetchUserWatchlist = async () => {
+  const fetchUserWatchlist = useCallback(async () => {
     if (!user || !token) return;
     
     setWatchlistLoading(true);
@@ -148,7 +146,6 @@ export const TradingWidget = () => {
       }
       
       const result = await response.json();
-      console.log('Watchlist response:', result);
       
       if (result && Array.isArray(result)) {
         setWatchlist(result);
@@ -158,12 +155,18 @@ export const TradingWidget = () => {
     } catch (error) {
       console.error('Error fetching watchlist:', error);
       setWatchlist([]);
+      toast({
+        title: "Lỗi watchlist",
+        description: "Không thể tải danh sách theo dõi",
+        variant: "destructive",
+        duration: 3000
+      });
     } finally {
       setWatchlistLoading(false);
     }
-  };
+  }, [user, token, toast]);
 
-  // Toggle watchlist item
+  // Toggle watchlist item với error handling
   const toggleWatchlist = async (coin: CoinData) => {
     if (!user || !token) {
       toast({
@@ -195,16 +198,12 @@ export const TradingWidget = () => {
           throw new Error('Failed to remove from watchlist');
         }
         
-        const result = await response.json();
-        
-        if (typeof result === 'string' && result.includes('successfully')) {
-          setWatchlist(prev => prev.filter(item => item.coinId !== coin.id));
-          toast({
-            title: "Đã xóa khỏi watchlist",
-            description: `${coin.name} đã được xóa khỏi danh sách theo dõi`,
-            duration: 2000
-          });
-        }
+        setWatchlist(prev => prev.filter(item => item.coinId !== coin.id));
+        toast({
+          title: "Đã xóa khỏi watchlist",
+          description: `${coin.name} đã được xóa khỏi danh sách theo dõi`,
+          duration: 2000
+        });
       } else {
         // Add to watchlist
         const watchlistData = {
@@ -231,18 +230,13 @@ export const TradingWidget = () => {
           throw new Error('Failed to add to watchlist');
         }
         
-        const result = await response.json();
-        console.log('Add watchlist result:', result);
-        
-        if (result && (result.watchlistId || result.coinId)) {
-          // Refresh watchlist
-          fetchUserWatchlist();
-          toast({
-            title: "Đã thêm vào watchlist",
-            description: `${coin.name} đã được thêm vào danh sách theo dõi`,
-            duration: 2000
-          });
-        }
+        // Refresh watchlist
+        fetchUserWatchlist();
+        toast({
+          title: "Đã thêm vào watchlist",
+          description: `${coin.name} đã được thêm vào danh sách theo dõi`,
+          duration: 2000
+        });
       }
     } catch (error) {
       console.error('Error toggling watchlist:', error);
@@ -260,15 +254,32 @@ export const TradingWidget = () => {
     return watchlist.some(item => item.coinId === coinId);
   };
 
+  // Manual refresh với rate limiting
+  const handleManualRefresh = () => {
+    if (refreshDebounced) {
+      toast({
+        title: "Vui lòng đợi",
+        description: "Đang làm mới dữ liệu...",
+        duration: 2000
+      });
+      return;
+    }
+    fetchCoins(true);
+  };
+
   // Load coins khi component mount
   useEffect(() => {
     fetchCoins();
     
-    // Auto refresh every 60 seconds
-    const interval = setInterval(fetchCoins, 60000);
+    // Auto refresh every 60 seconds, but only if not rate limited
+    const interval = setInterval(() => {
+      if (connectionStatus !== 'offline' && !refreshDebounced) {
+        fetchCoins(false);
+      }
+    }, 60000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchCoins, connectionStatus, refreshDebounced]);
 
   // Load watchlist khi user đăng nhập
   useEffect(() => {
@@ -277,23 +288,13 @@ export const TradingWidget = () => {
     } else {
       setWatchlist([]);
     }
-  }, [user, token]);
+  }, [user, token, fetchUserWatchlist]);
 
   const formatPrice = (price: number) => {
     if (price >= 1) {
       return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     } else {
       return `$${price.toFixed(4)}`;
-    }
-  };
-
-  const formatVolume = (volume: number) => {
-    if (volume >= 1e9) {
-      return `$${(volume / 1e9).toFixed(1)}B`;
-    } else if (volume >= 1e6) {
-      return `$${(volume / 1e6).toFixed(1)}M`;
-    } else {
-      return `$${(volume / 1e3).toFixed(1)}K`;
     }
   };
 
@@ -307,14 +308,26 @@ export const TradingWidget = () => {
     return `${Math.floor(diff / 3600)}h ago`;
   };
 
+  // Connection status icon
+  const getConnectionIcon = () => {
+    switch (connectionStatus) {
+      case 'online':
+        return <Wifi className="h-4 w-4 text-green-600" />;
+      case 'limited':
+        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'offline':
+        return <WifiOff className="h-4 w-4 text-red-600" />;
+      default:
+        return <Wifi className="h-4 w-4 text-gray-400" />;
+    }
+  };
+
   // Lọc danh sách coins để hiển thị
   const getDisplayedCoins = () => {
     if (!user) {
-      // Cho user chưa đăng nhập, hiển thị 10 coins đầu hoặc tất cả nếu showAll = true
       return showAll ? coins : coins.slice(0, 10);
     }
     
-    // Nếu có watchlist, hiển thị watchlist ở đầu + tất cả coins khác
     if (watchlist.length > 0) {
       const watchlistCoinIds = watchlist.map(item => item.coinId);
       const watchlistCoins = coins.filter(coin => watchlistCoinIds.includes(coin.id))
@@ -327,11 +340,9 @@ export const TradingWidget = () => {
       return [...watchlistCoins, ...nonWatchlistCoins];
     }
     
-    // Nếu chưa có watchlist, hiển thị tất cả top coins
     return coins;
   };
 
-  // Lọc coins cho edit mode
   const filteredCoins = coins.filter(coin => 
     coin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     coin.symbol.toLowerCase().includes(searchTerm.toLowerCase())
@@ -357,18 +368,19 @@ export const TradingWidget = () => {
                   {formatLastUpdate(lastUpdate)}
                 </p>
               )}
+              {getConnectionIcon()}
             </div>
           </div>
           <div className="flex gap-2">
             <Button
               variant="ghost"
               size="sm"
-              onClick={fetchCoins}
-              disabled={isLoading}
+              onClick={handleManualRefresh}
+              disabled={isLoading || refreshDebounced}
               className="h-8 w-8 p-0"
               title="Refresh data"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isLoading || refreshDebounced ? 'animate-spin' : ''}`} />
             </Button>
             {user && (
               <Dialog open={isEditMode} onOpenChange={setIsEditMode}>
@@ -412,7 +424,10 @@ export const TradingWidget = () => {
                                 />
                               )}
                               <div>
-                                <div className="font-medium">{coin.symbol.toUpperCase()}</div>
+                                <div className="font-medium flex items-center gap-2">
+                                  {coin.symbol.toUpperCase()}
+                                  {coin.error && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                                </div>
                                 <div className="text-xs text-gray-500">{coin.name}</div>
                               </div>
                             </div>
@@ -457,6 +472,14 @@ export const TradingWidget = () => {
               <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
               <span className="ml-2 text-gray-500">Loading...</span>
             </div>
+          ) : connectionStatus === 'offline' && coins.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+              <WifiOff className="h-8 w-8 text-gray-400 mb-2" />
+              <p className="text-gray-500 text-sm mb-2">Không thể kết nối</p>
+              <Button size="sm" onClick={handleManualRefresh} disabled={refreshDebounced}>
+                Thử lại
+              </Button>
+            </div>
           ) : (
             <div className="max-h-96 overflow-y-auto">
               {displayedCoins.map((coin) => {
@@ -471,7 +494,7 @@ export const TradingWidget = () => {
                     <div
                       className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors ${
                         isWatched ? 'bg-emerald-50' : ''
-                      }`}
+                      } ${coin.error ? 'bg-yellow-50' : ''}`}
                     >
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2 w-10">
@@ -490,7 +513,10 @@ export const TradingWidget = () => {
                             />
                           )}
                           <div>
-                            <div className="font-medium text-gray-900">{coin.symbol.toUpperCase()}</div>
+                            <div className="font-medium text-gray-900 flex items-center gap-1">
+                              {coin.symbol.toUpperCase()}
+                              {coin.error && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
+                            </div>
                             <div className="text-xs text-gray-500 truncate w-20">{coin.name}</div>
                           </div>
                         </div>
@@ -515,6 +541,16 @@ export const TradingWidget = () => {
                   </Link>
                 );
               })}
+            </div>
+          )}
+          
+          {/* Status và Action Footer */}
+          {connectionStatus === 'limited' && (
+            <div className="px-4 py-3 bg-yellow-50 border-t">
+              <div className="flex items-center gap-2 text-xs text-yellow-700">
+                <AlertTriangle className="h-3 w-3" />
+                <span>Dữ liệu giới hạn - Cập nhật chậm</span>
+              </div>
             </div>
           )}
           
