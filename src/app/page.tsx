@@ -304,17 +304,20 @@ export default function Home() {
       <section className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-8 ${
         isFeatured ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200' : ''
       }`}>
-        <div className="flex items-center justify-between mb-8">
+         <div className="flex items-center justify-between mb-8">
           <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
             {isFeatured && <Star className="w-8 h-8 text-yellow-500 fill-current" />}
             {config.title}
           </h2>
-          <Link href={config.linkTo}>
-            <div className="flex items-center text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium group transition-colors">
-              <span>Xem tất cả</span>
-              <ChevronRight className="ml-1 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </Link>
+          {/* Hiển thị "Xem tất cả" cho các danh mục khác ngoài "Bài viết nổi bật" và "Tin tức mới nhất" */}
+          {config.id !== 'featured' && config.id !== 'latest' && (
+            <Link href={config.linkTo}>
+              <div className="flex items-center text-emerald-600 hover:text-emerald-700 cursor-pointer font-medium group transition-colors">
+                <span>Xem tất cả</span>
+                <ChevronRight className="ml-1 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </Link>
+          )}
         </div>
         
         {loading ? (
@@ -329,14 +332,14 @@ export default function Home() {
             ))}
           </div>
         ) : sectionData.length > 0 ? (
-          <div className={isFeatured ? "grid grid-cols-1 md:grid-cols-3 gap-6" : ""}>
+          <div className={isFeatured ? "grid grid-cols-1 md:grid-cols-2 gap-6" : ""}>
             {isFeatured ? (
-              // Layout đặc biệt cho bài viết nổi bật - hiển thị tối đa 3 bài
-              sectionData.slice(0, 3).map((item: NewsItem, index: number) => (
+              // Layout đặc biệt cho bài viết nổi bật - hiển thị tối đa 2 bài
+              sectionData.slice(0, 2).map((item: NewsItem, index: number) => (
                 <Link key={item.newsID || index} href={`/news/${item.newsID}`}>
                   <div className="group cursor-pointer h-full">
                     <div className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 h-full flex flex-col border border-yellow-200">
-                      <div className="relative h-48 overflow-hidden">
+                      <div className="relative h-60 overflow-hidden">
                         <img
                           src={item.imagesLink || "/placeholder/400/250.jpg"}
                           alt={item.header || item.title}
@@ -347,19 +350,19 @@ export default function Home() {
                           Nổi bật
                         </div>
                       </div>
-                      <div className="p-4 flex-1 flex flex-col">
-                        <h3 className="font-bold text-lg mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
+                      <div className="p-5 flex-1 flex flex-col">
+                        <h3 className="font-bold text-xl mb-3 line-clamp-2 group-hover:text-emerald-600 transition-colors">
                           {item.header || item.title}
                         </h3>
-                        <p className="text-sm text-gray-600 line-clamp-2 mb-3 flex-1">
-                          {item.content?.slice(0, 100) || item.title?.slice(0, 100)}...
+                        <p className="text-sm text-gray-600 line-clamp-3 mb-4 flex-1">
+                          {item.content?.slice(0, 150) || item.title?.slice(0, 150)}...
                         </p>
                         <div className="flex items-center justify-between text-xs text-gray-500">
                           <div className="flex items-center gap-2">
                             <img
                               src={item.userAvartar || "/placeholder/20/20"}
                               alt={item.userName}
-                              className="w-5 h-5 rounded-full"
+                              className="w-6 h-6 rounded-full"
                             />
                             <span>{item.userName || "Unknown"}</span>
                           </div>
