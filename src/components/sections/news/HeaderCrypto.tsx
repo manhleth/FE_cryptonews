@@ -1,11 +1,12 @@
 "use client"
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, X, Settings, Pencil, LogOut, Shield, Bookmark, FileText } from 'lucide-react';
+import { Search, X, Settings, Pencil, LogOut, Shield, Bookmark, FileText, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -312,41 +313,53 @@ export const HeaderCrypto = () => {
           </div>
 
           {/* ================== MIDDLE SECTION - NAVIGATION ================== */}
-          <nav className="hidden md:flex items-center gap-6 mx-4">
-            {/* Home Link */}
-            <a 
-              href="/" 
-              className={`text-gray-600 hover:text-gray-900 pb-1 ${
-                selectedCategoryId === null ? 'border-b border-gray-900' : ''
-              }`} 
-              onClick={handleHomeClick}
-            >
-              Home
-            </a>
-            
-            {/* Categories Navigation */}
-            {loading ? (
-              <span>Đang tải...</span>
-            ) : error ? (
-              <span>Lỗi: {error}</span>
-            ) : (
-              categories.map((category: any) => (
-                <a
-                  key={category.categoryId}
-                  href={`/category/${category.categoryId}`}
-                  className={`text-gray-600 hover:text-gray-900 pb-1 ${
-                    selectedCategoryId === category.categoryId ? 'border-b border-gray-900' : ''
-                  }`}
-                  onClick={(e) => { 
-                    e.preventDefault(); 
-                    handleCategoryClick(category.categoryId);
-                  }}
-                >
-                  {category.categoryName}
-                </a>
-              ))
-            )}
-          </nav>
+  <nav className="hidden md:flex items-center gap-6 mx-4">
+  {/* Home Link */}
+  <a 
+    href="/" 
+    className={`text-gray-600 hover:text-gray-900 pb-1 ${
+      selectedCategoryId === null ? 'border-b border-gray-900' : ''
+    }`} 
+    onClick={handleHomeClick}
+  >
+    Home
+  </a>
+  
+  {/* Watchlist Link - chỉ hiển thị khi đã đăng nhập */}
+  {user && (
+    <Link 
+      href="/watchlist"
+      className={`text-gray-600 hover:text-gray-900 pb-1 flex items-center gap-1 ${
+        pathname === '/watchlist' ? 'border-b border-gray-900' : ''
+      }`}
+    >
+      Watchlist
+    </Link>
+  )}
+  
+  {/* Categories Navigation */}
+  {loading ? (
+    <span>Đang tải...</span>
+  ) : error ? (
+    <span>Lỗi: {error}</span>
+  ) : (
+    categories.map((category: any) => (
+      <a
+        key={category.categoryId}
+        href={`/category/${category.categoryId}`}
+        className={`text-gray-600 hover:text-gray-900 pb-1 ${
+          selectedCategoryId === category.categoryId ? 'border-b border-gray-900' : ''
+        }`}
+        onClick={(e) => { 
+          e.preventDefault(); 
+          handleCategoryClick(category.categoryId);
+        }}
+      >
+        {category.categoryName}
+      </a>
+    ))
+  )}
+</nav>
 
           {/* ================== RIGHT SECTION - SETTINGS & USER ================== */}
           <div className="flex items-center gap-4">
