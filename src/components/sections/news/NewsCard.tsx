@@ -22,16 +22,20 @@ interface NewsCardProps {
     newsID: number;
     imagesLink: string;
     userAvartar: string;
-  }
+  };
+  hideBookmark?: boolean; // Thêm prop này
 }
 
-export const NewsCard = ({ item }: NewsCardProps) => {
+export const NewsCard = ({ item, hideBookmark = false }: NewsCardProps) => {
   const router = useRouter();
   const { token } = useAuth();
   const [isSaved, setIsSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Chỉ fetch saved news nếu có token và không ẩn bookmark
+    if (!token || hideBookmark) return;
+
     const fetchSavedNews = async () => {
       try {
         const response = await fetch('http://localhost:5000/api/Saved/GetYourListSaved', {
@@ -49,10 +53,8 @@ export const NewsCard = ({ item }: NewsCardProps) => {
       }
     };
 
-    if (token) {
-      fetchSavedNews();
-    }
-  }, [token, item.newsID]);
+    fetchSavedNews();
+  }, [token, item.newsID, hideBookmark]);
 
   const handleCardClick = () => {
     router.push(`/news/${item.newsID}`);
@@ -158,17 +160,20 @@ export const NewsCard = ({ item }: NewsCardProps) => {
             <span>{item.timeReading || "5"} phút đọc</span>
           </div>
           <div className="flex gap-1">
-            <button
-              onClick={handleBookmarkClick}
-              className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
-              aria-label="Toggle Bookmark"
-              disabled={loading}
-            >
-              <BookmarkIcon
-                size={16}
-                className={`${isSaved ? 'fill-emerald-500 text-emerald-500' : 'text-gray-400 hover:text-emerald-500'} transition-colors`}
-              />
-            </button>
+            {/* Chỉ hiển thị nút bookmark khi hideBookmark = false */}
+            {!hideBookmark && (
+              <button
+                onClick={handleBookmarkClick}
+                className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+                aria-label="Toggle Bookmark"
+                disabled={loading}
+              >
+                <BookmarkIcon
+                  size={16}
+                  className={`${isSaved ? 'fill-emerald-500 text-emerald-500' : 'text-gray-400 hover:text-emerald-500'} transition-colors`}
+                />
+              </button>
+            )}
             <button 
               onClick={handleShareClick}
               className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"

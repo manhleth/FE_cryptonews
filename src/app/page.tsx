@@ -397,6 +397,7 @@ export default function Home() {
                           imagesLink: item.imagesLink || "",
                           userAvartar: item.userAvartar || "", // Truyền đúng trường avatar
                         }}
+                        hideBookmark={config.id === 'latest'} 
                       />
                     </div>
                   );
@@ -452,28 +453,6 @@ export default function Home() {
                 </Button>
               </Link>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-8 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { label: 'Bài viết', value: '1,200+', icon: BookOpen, color: 'bg-emerald-500' },
-              { label: 'Khóa học', value: '50+', icon: Star, color: 'bg-teal-500' },
-              { label: 'Học viên', value: '10,000+', icon: TrendingUp, color: 'bg-green-500' },
-              { label: 'Đánh giá', value: '4.9★', icon: Star, color: 'bg-emerald-600' },
-            ].map((stat, index) => (
-              <div key={index} className="text-center space-y-2">
-                <div className={`mx-auto w-10 h-10 ${stat.color} rounded-xl flex items-center justify-center shadow-lg`}>
-                  <stat.icon className="h-5 w-5 text-white" />
-                </div>
-                <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-                <div className="text-gray-600 text-sm">{stat.label}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
