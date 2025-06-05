@@ -1,34 +1,13 @@
-// src/components/TradingWidget.tsx
+// src/components/OptimizedTradingWidget.tsx
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Star, TrendingUp, TrendingDown, Eye, EyeOff, Settings, Plus, RefreshCw, Loader2, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
+import { Star, TrendingUp, TrendingDown, Eye, EyeOff, RefreshCw, Loader2, Plus, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import Link from 'next/link';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { cryptoAPI } from "@/services/cryptoApi";
-
-interface CoinData {
-  id: string;
-  symbol: string;
-  name: string;
-  image: string;
-  current_price: number;
-  price_change_percentage_24h: number;
-  total_volume: number;
-  market_cap: number;
-  market_cap_rank: number;
-  error?: boolean;
-}
+import { optimizedCryptoAPI, type CoinData } from '@/services/optimizedCryptoApi';
 
 interface WatchlistItem {
   watchlistId: number;
@@ -42,7 +21,9 @@ interface WatchlistItem {
   createdDate: string;
 }
 
-export const TradingWidget = () => {
+type ConnectionStatus = 'online' | 'offline' | 'limited';
+
+export const OptimizedTradingWidget = () => {
   const { user, token } = useAuth();
   const { toast } = useToast();
   
@@ -50,86 +31,70 @@ export const TradingWidget = () => {
   const [coins, setCoins] = useState<CoinData[]>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [watchlistLoading, setWatchlistLoading] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'limited'>('online');
-  const [retryCount, setRetryCount] = useState(0);
-  const [maxRetries] = useState(3);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('online');
+  const [updatingCoins, setUpdatingCoins] = useState<Set<string>>(new Set());
 
-  // Debounced refresh để tránh spam requests
-  const [refreshDebounced, setRefreshDebounced] = useState(false);
+  // Memoized functions
+  const formatPrice = useCallback((price: number) => {
+    if (price >= 1) {
+      return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else {
+      return `$${price.toFixed(4)}`;
+    }
+  }, []);
 
-  // Fetch coins data với error handling tốt hơn
-  const fetchCoins = useCallback(async (showLoading = true) => {
-    if (refreshDebounced) return;
+  const formatLastUpdate = useCallback((date: Date | null) => {
+    if (!date) return '';
+    const now = new Date();
+    const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
     
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    return `${Math.floor(diff / 3600)}h ago`;
+  }, []);
+
+  const isInWatchlist = useCallback((coinId: string) => {
+    return watchlist.some(item => item.coinId === coinId);
+  }, [watchlist]);
+
+  // Optimized data fetching
+  const fetchCoins = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
-    setRefreshDebounced(true);
     
     try {
       setConnectionStatus('online');
-      const data = await cryptoAPI.getTopCoins(100);
+      const data = await optimizedCryptoAPI.getTopCoins(100);
       
       if (data && data.length > 0) {
         setCoins(data);
         setLastUpdate(new Date());
-        setRetryCount(0);
         
-        // Check if data contains error flag (fallback data)
-        if (data[0]?.error) {
+        // Check if data contains fallback flag
+        if (data.some(coin => 'fallback' in coin)) {
           setConnectionStatus('limited');
-          toast({
-            title: "Dữ liệu giới hạn",
-            description: "Đang sử dụng dữ liệu dự phòng do giới hạn API",
-            duration: 3000
-          });
         }
       } else {
         throw new Error('No data received');
       }
     } catch (error: any) {
       console.error('Error fetching coins:', error);
-      setRetryCount(prev => prev + 1);
       
       if (error.message === 'RATE_LIMITED') {
         setConnectionStatus('limited');
-        toast({
-          title: "Giới hạn API",
-          description: "Đã đạt giới hạn request. Thử lại sau vài phút.",
-          variant: "destructive",
-          duration: 5000
-        });
-      } else if (retryCount < maxRetries) {
-        setConnectionStatus('limited');
-        // Retry với delay tăng dần
-        setTimeout(() => {
-          fetchCoins(false);
-        }, Math.pow(2, retryCount) * 2000);
       } else {
         setConnectionStatus('offline');
-        toast({
-          title: "Không thể kết nối",
-          description: "Không thể lấy dữ liệu giá coin. Kiểm tra kết nối mạng.",
-          variant: "destructive",
-          duration: 5000
-        });
       }
     } finally {
       if (showLoading) setIsLoading(false);
-      // Reset debounce sau 2 giây
-      setTimeout(() => setRefreshDebounced(false), 2000);
     }
-  }, [refreshDebounced, retryCount, maxRetries, toast]);
+  }, []);
 
-  // Fetch user's watchlist từ database
   const fetchUserWatchlist = useCallback(async () => {
     if (!user || !token) return;
     
-    setWatchlistLoading(true);
     try {
       const response = await fetch(
         `http://localhost:5000/api/Watchlist/GetUserWatchlist?userId=${user.userId}`,
@@ -141,33 +106,40 @@ export const TradingWidget = () => {
         }
       );
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch watchlist');
-      }
+      if (!response.ok) throw new Error('Failed to fetch watchlist');
       
       const result = await response.json();
-      
-      if (result && Array.isArray(result)) {
-        setWatchlist(result);
-      } else {
-        setWatchlist([]);
-      }
+      setWatchlist(Array.isArray(result) ? result : []);
     } catch (error) {
       console.error('Error fetching watchlist:', error);
       setWatchlist([]);
-      toast({
-        title: "Lỗi watchlist",
-        description: "Không thể tải danh sách theo dõi",
-        variant: "destructive",
-        duration: 3000
-      });
-    } finally {
-      setWatchlistLoading(false);
     }
-  }, [user, token, toast]);
+  }, [user, token]);
 
-  // Toggle watchlist item với error handling
-  const toggleWatchlist = async (coin: CoinData) => {
+  // Optimistic watchlist updates
+  const updateWatchlistOptimistic = useCallback((coinId: string, action: 'add' | 'remove', coinData?: CoinData) => {
+    setWatchlist(prev => {
+      if (action === 'add' && coinData) {
+        const newItem: WatchlistItem = {
+          watchlistId: Date.now(),
+          userId: user!.userId,
+          coinId: coinData.id,
+          coinSymbol: coinData.symbol,
+          coinName: coinData.name,
+          coinImage: coinData.image,
+          order: prev.length + 1,
+          isActive: true,
+          createdDate: new Date().toISOString()
+        };
+        return [...prev, newItem];
+      } else if (action === 'remove') {
+        return prev.filter(item => item.coinId !== coinId);
+      }
+      return prev;
+    });
+  }, [user]);
+
+  const toggleWatchlist = useCallback(async (coin: CoinData) => {
     if (!user || !token) {
       toast({
         title: "Cần đăng nhập",
@@ -178,10 +150,14 @@ export const TradingWidget = () => {
       return;
     }
     
-    const isInWatchlist = watchlist.some(item => item.coinId === coin.id);
+    const isWatched = isInWatchlist(coin.id);
+    setUpdatingCoins(prev => new Set(prev).add(coin.id));
+    
+    // Optimistic update
+    updateWatchlistOptimistic(coin.id, isWatched ? 'remove' : 'add', coin);
     
     try {
-      if (isInWatchlist) {
+      if (isWatched) {
         // Remove from watchlist
         const response = await fetch(
           `http://localhost:5000/api/Watchlist/RemoveFromWatchlist?userId=${user.userId}&coinId=${coin.id}`,
@@ -194,11 +170,8 @@ export const TradingWidget = () => {
           }
         );
         
-        if (!response.ok) {
-          throw new Error('Failed to remove from watchlist');
-        }
+        if (!response.ok) throw new Error('Failed to remove from watchlist');
         
-        setWatchlist(prev => prev.filter(item => item.coinId !== coin.id));
         toast({
           title: "Đã xóa khỏi watchlist",
           description: `${coin.name} đã được xóa khỏi danh sách theo dõi`,
@@ -226,12 +199,8 @@ export const TradingWidget = () => {
           }
         );
         
-        if (!response.ok) {
-          throw new Error('Failed to add to watchlist');
-        }
+        if (!response.ok) throw new Error('Failed to add to watchlist');
         
-        // Refresh watchlist
-        fetchUserWatchlist();
         toast({
           title: "Đã thêm vào watchlist",
           description: `${coin.name} đã được thêm vào danh sách theo dõi`,
@@ -240,90 +209,30 @@ export const TradingWidget = () => {
       }
     } catch (error) {
       console.error('Error toggling watchlist:', error);
+      // Revert optimistic update
+      updateWatchlistOptimistic(coin.id, isWatched ? 'add' : 'remove', coin);
       toast({
         title: "Lỗi",
         description: "Không thể cập nhật watchlist. Vui lòng thử lại.",
         variant: "destructive",
         duration: 3000
       });
-    }
-  };
-
-  // Check if coin is in watchlist
-  const isInWatchlist = (coinId: string) => {
-    return watchlist.some(item => item.coinId === coinId);
-  };
-
-  // Manual refresh với rate limiting
-  const handleManualRefresh = () => {
-    if (refreshDebounced) {
-      toast({
-        title: "Vui lòng đợi",
-        description: "Đang làm mới dữ liệu...",
-        duration: 2000
+    } finally {
+      setUpdatingCoins(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(coin.id);
+        return newSet;
       });
-      return;
     }
+  }, [user, token, watchlist.length, isInWatchlist, updateWatchlistOptimistic, toast]);
+
+  // Manual refresh with debouncing
+  const handleManualRefresh = useCallback(() => {
     fetchCoins(true);
-  };
+  }, [fetchCoins]);
 
-  // Load coins khi component mount
-  useEffect(() => {
-    fetchCoins();
-    
-    // Auto refresh every 60 seconds, but only if not rate limited
-    const interval = setInterval(() => {
-      if (connectionStatus !== 'offline' && !refreshDebounced) {
-        fetchCoins(false);
-      }
-    }, 60000);
-    
-    return () => clearInterval(interval);
-  }, [fetchCoins, connectionStatus, refreshDebounced]);
-
-  // Load watchlist khi user đăng nhập
-  useEffect(() => {
-    if (user && token) {
-      fetchUserWatchlist();
-    } else {
-      setWatchlist([]);
-    }
-  }, [user, token, fetchUserWatchlist]);
-
-  const formatPrice = (price: number) => {
-    if (price >= 1) {
-      return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    } else {
-      return `$${price.toFixed(4)}`;
-    }
-  };
-
-  const formatLastUpdate = (date: Date | null) => {
-    if (!date) return '';
-    const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    return `${Math.floor(diff / 3600)}h ago`;
-  };
-
-  // Connection status icon
-  const getConnectionIcon = () => {
-    switch (connectionStatus) {
-      case 'online':
-        return <Wifi className="h-4 w-4 text-green-600" />;
-      case 'limited':
-        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
-      case 'offline':
-        return <WifiOff className="h-4 w-4 text-red-600" />;
-      default:
-        return <Wifi className="h-4 w-4 text-gray-400" />;
-    }
-  };
-
-  // Lọc danh sách coins để hiển thị
-  const getDisplayedCoins = () => {
+  // Display logic
+  const displayedCoins = useMemo(() => {
     if (!user) {
       return showAll ? coins : coins.slice(0, 10);
     }
@@ -341,15 +250,44 @@ export const TradingWidget = () => {
     }
     
     return coins;
+  }, [user, showAll, coins, watchlist]);
+
+  const getConnectionIcon = () => {
+    switch (connectionStatus) {
+      case 'online':
+        return <Wifi className="h-4 w-4 text-green-600" />;
+      case 'limited':
+        return <AlertTriangle className="h-4 w-4 text-yellow-600" />;
+      case 'offline':
+        return <WifiOff className="h-4 w-4 text-red-600" />;
+      default:
+        return <Wifi className="h-4 w-4 text-gray-400" />;
+    }
   };
 
-  const filteredCoins = coins.filter(coin => 
-    coin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    coin.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Effects
+  useEffect(() => {
+    fetchCoins();
+  }, [fetchCoins]);
 
-  const displayedCoins = getDisplayedCoins();
-  const watchlistCount = watchlist.length;
+  useEffect(() => {
+    if (user && token) {
+      fetchUserWatchlist();
+    } else {
+      setWatchlist([]);
+    }
+  }, [user, token, fetchUserWatchlist]);
+
+  // Auto refresh every 3 minutes
+  useEffect(() => {
+    if (connectionStatus === 'offline') return;
+
+    const interval = setInterval(() => {
+      fetchCoins(false);
+    }, 180000); // 3 minutes
+    
+    return () => clearInterval(interval);
+  }, [fetchCoins, connectionStatus]);
 
   return (
     <Card className="sticky top-4 w-80 bg-white border border-gray-200 shadow-sm">
@@ -357,11 +295,11 @@ export const TradingWidget = () => {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-lg font-bold text-gray-900">
-              {user && watchlistCount > 0 ? 'Danh sách theo dõi' : 'Top Cryptocurrencies'}
+              {user && watchlist.length > 0 ? 'Danh sách theo dõi' : 'Top Cryptocurrencies'}
             </CardTitle>
             <div className="flex items-center gap-2 mt-1">
-              {user && watchlistCount > 0 && (
-                <p className="text-xs text-gray-500">{watchlistCount} coins đang theo dõi</p>
+              {user && watchlist.length > 0 && (
+                <p className="text-xs text-gray-500">{watchlist.length} coins đang theo dõi</p>
               )}
               {lastUpdate && (
                 <p className="text-xs text-gray-400">
@@ -376,82 +314,12 @@ export const TradingWidget = () => {
               variant="ghost"
               size="sm"
               onClick={handleManualRefresh}
-              disabled={isLoading || refreshDebounced}
+              disabled={isLoading}
               className="h-8 w-8 p-0"
               title="Refresh data"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading || refreshDebounced ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
-            {user && (
-              <Dialog open={isEditMode} onOpenChange={setIsEditMode}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    title="Edit watchlist"
-                  >
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Chỉnh sửa danh sách theo dõi</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Input
-                      placeholder="Tìm kiếm coin..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    {watchlistLoading ? (
-                      <div className="flex justify-center py-4">
-                        <Loader2 className="h-6 w-6 animate-spin" />
-                      </div>
-                    ) : (
-                      <div className="max-h-64 overflow-y-auto space-y-2">
-                        {filteredCoins.map((coin) => (
-                          <div
-                            key={coin.id}
-                            className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50"
-                          >
-                            <div className="flex items-center space-x-3">
-                              {coin.image && (
-                                <img 
-                                  src={coin.image} 
-                                  alt={coin.name}
-                                  className="w-6 h-6 rounded-full"
-                                />
-                              )}
-                              <div>
-                                <div className="font-medium flex items-center gap-2">
-                                  {coin.symbol.toUpperCase()}
-                                  {coin.error && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
-                                </div>
-                                <div className="text-xs text-gray-500">{coin.name}</div>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => toggleWatchlist(coin)}
-                              className="p-2 hover:bg-gray-100 rounded"
-                              disabled={watchlistLoading}
-                            >
-                              <Star
-                                className={`h-4 w-4 ${
-                                  isInWatchlist(coin.id)
-                                    ? 'fill-yellow-400 text-yellow-400'
-                                    : 'text-gray-400'
-                                }`}
-                              />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
             <Button
               variant="ghost"
               size="sm"
@@ -476,7 +344,7 @@ export const TradingWidget = () => {
             <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
               <WifiOff className="h-8 w-8 text-gray-400 mb-2" />
               <p className="text-gray-500 text-sm mb-2">Không thể kết nối</p>
-              <Button size="sm" onClick={handleManualRefresh} disabled={refreshDebounced}>
+              <Button size="sm" onClick={handleManualRefresh}>
                 Thử lại
               </Button>
             </div>
@@ -484,6 +352,7 @@ export const TradingWidget = () => {
             <div className="max-h-96 overflow-y-auto">
               {displayedCoins.map((coin) => {
                 const isWatched = isInWatchlist(coin.id);
+                const isUpdating = updatingCoins.has(coin.id);
                 
                 return (
                   <Link 
@@ -494,12 +363,28 @@ export const TradingWidget = () => {
                     <div
                       className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors ${
                         isWatched ? 'bg-emerald-50' : ''
-                      } ${coin.error ? 'bg-yellow-50' : ''}`}
+                      }`}
                     >
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2 w-10">
-                          {isWatched ? (
-                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                          {user ? (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                toggleWatchlist(coin);
+                              }}
+                              disabled={isUpdating}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              {isUpdating ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                              ) : isWatched ? (
+                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                              ) : (
+                                <Star className="h-4 w-4 text-gray-400 hover:text-yellow-400" />
+                              )}
+                            </button>
                           ) : (
                             <span className="text-sm text-gray-500">#{coin.market_cap_rank}</span>
                           )}
@@ -510,12 +395,14 @@ export const TradingWidget = () => {
                               src={coin.image} 
                               alt={coin.name}
                               className="w-6 h-6 rounded-full"
+                              onError={(e) => {
+                                e.currentTarget.src = '/placeholder/24/24.jpg';
+                              }}
                             />
                           )}
                           <div>
                             <div className="font-medium text-gray-900 flex items-center gap-1">
                               {coin.symbol.toUpperCase()}
-                              {coin.error && <AlertTriangle className="h-3 w-3 text-yellow-500" />}
                             </div>
                             <div className="text-xs text-gray-500 truncate w-20">{coin.name}</div>
                           </div>
@@ -544,7 +431,7 @@ export const TradingWidget = () => {
             </div>
           )}
           
-          {/* Status và Action Footer */}
+          {/* Status Footer */}
           {connectionStatus === 'limited' && (
             <div className="px-4 py-3 bg-yellow-50 border-t">
               <div className="flex items-center gap-2 text-xs text-yellow-700">
@@ -572,7 +459,7 @@ export const TradingWidget = () => {
             </div>
           )}
           
-          {user && watchlistCount === 0 && !watchlistLoading && (
+          {user && watchlist.length === 0 && (
             <div className="px-4 py-3 bg-blue-50 border-t text-center">
               <p className="text-xs text-blue-700 mb-2">
                 Chưa có coin nào trong danh sách
@@ -580,11 +467,13 @@ export const TradingWidget = () => {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setIsEditMode(true)}
+                asChild
                 className="text-xs h-7"
               >
-                <Plus className="h-3 w-3 mr-1" />
-                Thêm coin
+                <Link href="/watchlist">
+                  <Plus className="h-3 w-3 mr-1" />
+                  Quản lý watchlist
+                </Link>
               </Button>
             </div>
           )}

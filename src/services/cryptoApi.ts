@@ -2,14 +2,15 @@
 class CryptoAPIService {
   private static instance: CryptoAPIService;
   private baseURL = 'https://api.coingecko.com/api/v3';
+  private apiKey = process.env.NEXT_PUBLIC_COINGECKO_API_KEY;
   private requestQueue: Array<() => Promise<any>> = [];
   private isProcessing = false;
   private lastRequestTime = 0;
-  private minRequestInterval = 1100; // 1.1 giây giữa các request
+  private minRequestInterval = 2100; // 2.1 seconds (safe for 30 calls/min)
   private cache = new Map<string, { data: any; timestamp: number }>();
-  private cacheTimeout = 30000; // 30 giây
+  private cacheTimeout = 60000; // 1 minute cache
   private retryAttempts = 3;
-  private retryDelay = 2000; // 2 giây
+  private retryDelay = 2000;
 
   private constructor() {}
 
@@ -20,16 +21,16 @@ class CryptoAPIService {
     return CryptoAPIService.instance;
   }
 
-  // Kiểm tra cache
+  // Enhanced caching
   private getCachedData(key: string): any | null {
     const cached = this.cache.get(key);
     if (cached && (Date.now() - cached.timestamp) < this.cacheTimeout) {
+      console.log(`✅ Cache hit for: ${key}`);
       return cached.data;
     }
     return null;
   }
 
-  // Lưu cache
   private setCachedData(key: string, data: any): void {
     this.cache.set(key, {
       data,
@@ -37,18 +38,17 @@ class CryptoAPIService {
     });
   }
 
-  // Thêm delay giữa các request
+  // Rate limiting with queue
   private async delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Thực hiện request với rate limiting
+  // Enhanced request method with Demo API key
   private async makeRequest<T>(url: string, cacheKey?: string): Promise<T> {
-    // Kiểm tra cache trước
+    // Check cache first
     if (cacheKey) {
       const cachedData = this.getCachedData(cacheKey);
       if (cachedData) {
-        console.log(`Using cached data for: ${cacheKey}`);
         return cachedData;
       }
     }
@@ -56,25 +56,34 @@ class CryptoAPIService {
     return new Promise((resolve, reject) => {
       this.requestQueue.push(async () => {
         try {
-          // Đảm bảo khoảng cách tối thiểu giữa các request
+          // Rate limiting
           const timeSinceLastRequest = Date.now() - this.lastRequestTime;
           if (timeSinceLastRequest < this.minRequestInterval) {
             await this.delay(this.minRequestInterval - timeSinceLastRequest);
           }
 
-          console.log(`Making request to: ${url}`);
-          
-          const response = await fetch(url, {
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'CryptoApp/1.0'
-            }
-          });
+          // Prepare headers with Demo API key
+          const headers: HeadersInit = {
+            'Accept': 'application/json',
+            'User-Agent': 'CryptoApp/1.0'
+          };
 
+          // Add Demo API key to headers
+          if (this.apiKey) {
+            headers['x-cg-demo-api-key'] = this.apiKey;
+            console.log(`🔑 Using Demo API key for: ${url}`);
+          } else {
+            console.warn('⚠️ No API key found, using public endpoints');
+          }
+
+          console.log(`📡 Making request to: ${url}`);
+          
+          const response = await fetch(url, { headers });
           this.lastRequestTime = Date.now();
 
           if (!response.ok) {
             if (response.status === 429) {
+              console.error('🚫 Rate limited! Waiting before retry...');
               throw new Error('RATE_LIMITED');
             }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -82,14 +91,15 @@ class CryptoAPIService {
 
           const data = await response.json();
           
-          // Lưu cache
+          // Cache successful response
           if (cacheKey) {
             this.setCachedData(cacheKey, data);
           }
 
+          console.log(`✅ Request successful for: ${url}`);
           resolve(data);
         } catch (error) {
-          console.error(`Request failed for ${url}:`, error);
+          console.error(`❌ Request failed for ${url}:`, error);
           reject(error);
         }
       });
@@ -98,13 +108,14 @@ class CryptoAPIService {
     });
   }
 
-  // Xử lý hàng đợi request
+  // Process request queue
   private async processQueue(): Promise<void> {
     if (this.isProcessing || this.requestQueue.length === 0) {
       return;
     }
 
     this.isProcessing = true;
+    console.log(`🔄 Processing queue: ${this.requestQueue.length} requests`);
 
     while (this.requestQueue.length > 0) {
       const request = this.requestQueue.shift();
@@ -120,7 +131,7 @@ class CryptoAPIService {
     this.isProcessing = false;
   }
 
-  // Retry logic với exponential backoff
+  // Retry logic with exponential backoff
   private async requestWithRetry<T>(
     url: string, 
     cacheKey?: string, 
@@ -130,20 +141,24 @@ class CryptoAPIService {
       return await this.makeRequest<T>(url, cacheKey);
     } catch (error: any) {
       if (attempt >= this.retryAttempts) {
+        console.error(`💥 Max retries reached for: ${url}`);
         throw error;
       }
 
-      console.log(`Retry attempt ${attempt} for ${url}`);
+      console.log(`🔄 Retry attempt ${attempt} for ${url}`);
       
-      // Exponential backoff
-      const delay = this.retryDelay * Math.pow(2, attempt - 1);
+      // Exponential backoff for rate limiting
+      const delay = error.message === 'RATE_LIMITED' 
+        ? this.retryDelay * Math.pow(2, attempt - 1) 
+        : this.retryDelay;
+      
       await this.delay(delay);
       
       return this.requestWithRetry<T>(url, cacheKey, attempt + 1);
     }
   }
 
-  // Public methods
+  // Public API methods
   async getCoinPrices(coinIds: string[]): Promise<any[]> {
     if (coinIds.length === 0) return [];
     
@@ -195,7 +210,7 @@ class CryptoAPIService {
     }
   }
 
-  // Fallback data khi API không khả dụng
+  // Fallback data methods
   private getFallbackPrices(coinIds: string[]): any[] {
     return coinIds.map(id => ({
       id,
@@ -232,17 +247,30 @@ class CryptoAPIService {
     }));
   }
 
-  // Clear cache manually
+  // Utility methods
   clearCache(): void {
     this.cache.clear();
-    console.log('Cache cleared');
+    console.log('🧹 Cache cleared');
   }
 
-  // Get cache status
   getCacheStatus(): { size: number; keys: string[] } {
     return {
       size: this.cache.size,
       keys: Array.from(this.cache.keys())
+    };
+  }
+
+  getApiStatus(): { 
+    hasApiKey: boolean; 
+    queueLength: number; 
+    isProcessing: boolean;
+    cacheSize: number;
+  } {
+    return {
+      hasApiKey: !!this.apiKey,
+      queueLength: this.requestQueue.length,
+      isProcessing: this.isProcessing,
+      cacheSize: this.cache.size
     };
   }
 }

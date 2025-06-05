@@ -124,7 +124,7 @@ export default function SignUpForm() {
                     </FormControl>
                     <FormLabel className="leading-none">
                       Tôi xác nhận rằng tôi ít nhất 18 tuổi và đồng ý với 
-                      điều khoản dịch vụ của All-in station và các chính sách bảo mật
+                      điều khoản dịch vụ của All-In Crypto Insights và các chính sách bảo mật
                     </FormLabel>
                     <FormMessage className="!mt-1 block" />
                   </FormItem>

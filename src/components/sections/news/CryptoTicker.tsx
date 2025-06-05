@@ -13,16 +13,8 @@ interface CryptoPrice {
   id: string;
 }
 
-interface Exchange {
-  id: string;
-  name: string;
-  image: string;
-  volume?: number;
-}
-
 export const CryptoTicker = () => {
   const [prices, setPrices] = useState<CryptoPrice[] | null>(null);
-  const [exchanges, setExchanges] = useState<Exchange[] | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'limited'>('online');
   const [retryCount, setRetryCount] = useState(0);
@@ -34,8 +26,9 @@ export const CryptoTicker = () => {
     const fetchPrices = async () => {
       try {
         setConnectionStatus('online');
+        console.log('🔄 Fetching crypto prices for ticker...');
         
-        // Lấy top 10 coins từ crypto API service
+        // Fetch top 10 coins for ticker
         const data = await cryptoAPI.getTopCoins(10);
 
         if (data && data.length > 0) {
@@ -59,64 +52,39 @@ export const CryptoTicker = () => {
           throw new Error('No data received');
         }
       } catch (error: any) {
-        console.error("Lỗi khi lấy dữ liệu crypto:", error);
+        console.error("❌ Error fetching crypto prices:", error);
         setRetryCount(prev => prev + 1);
         
         if (error.message === 'RATE_LIMITED') {
           setConnectionStatus('limited');
         } else if (retryCount < maxRetries) {
           setConnectionStatus('limited');
-          // Retry với delay
+          // Retry with exponential backoff
           setTimeout(() => {
             fetchPrices();
-          }, Math.pow(2, retryCount) * 2000);
+          }, Math.pow(2, retryCount) * 3000); // 3s, 6s, 12s
         } else {
           setConnectionStatus('offline');
-          // Fallback to static data
+          // Use fallback data
           setPrices(getFallbackPrices());
         }
       }
     };
 
-    const fetchExchanges = async () => {
-      try {
-        const response = await fetch("https://api.coingecko.com/api/v3/exchanges");
-        
-        if (!response.ok) {
-          throw new Error('Failed to fetch exchanges');
-        }
-        
-        const data = await response.json();
-        const exchangeData: Exchange[] = data.slice(0, 5).map((exchange: any) => ({
-          id: exchange.id,
-          name: exchange.name,
-          image: exchange.image,
-          volume: exchange.trade_volume_24h_btc ?? 0,
-        }));
-
-        setExchanges(exchangeData);
-      } catch (error) {
-        console.error("Lỗi khi lấy dữ liệu sàn giao dịch:", error);
-        // Fallback to static exchanges
-        setExchanges(getFallbackExchanges());
-      }
-    };
-
-    // Fetch dữ liệu ban đầu
+    // Initial fetch
     fetchPrices();
-    fetchExchanges();
     
-    // Auto refresh với interval dài hơn để tránh rate limit
+    // Auto refresh every 3 minutes (safe for 30 calls/min limit)
     const interval = setInterval(() => {
       if (connectionStatus !== 'offline') {
         fetchPrices();
       }
-    }, 120000); // 2 phút thay vì 1 phút
+    }, 180000); // 3 minutes instead of 30 seconds
 
     return () => clearInterval(interval);
   }, [connectionStatus, retryCount, maxRetries]);
 
-  // Fallback data cho crypto prices
+  // Fallback data for offline mode
   const getFallbackPrices = (): CryptoPrice[] => {
     return [
       {
@@ -143,15 +111,6 @@ export const CryptoTicker = () => {
         change: 0.8,
         icon: '/placeholder/32/32.jpg'
       }
-    ];
-  };
-
-  // Fallback data cho exchanges
-  const getFallbackExchanges = (): Exchange[] => {
-    return [
-      { id: 'binance', name: 'Binance', image: '/placeholder/32/32.jpg', volume: 45000 },
-      { id: 'coinbase', name: 'Coinbase', image: '/placeholder/32/32.jpg', volume: 12000 },
-      { id: 'kraken', name: 'Kraken', image: '/placeholder/32/32.jpg', volume: 8000 }
     ];
   };
 
@@ -215,7 +174,7 @@ export const CryptoTicker = () => {
                   {Math.abs(crypto.change).toFixed(2)}%
                 </span>
                 {connectionStatus === 'limited' && index === 0 && (
-                  <span className="ml-2 text-xs text-yellow-600">(Data limited)</span>
+                  <span className="ml-2 text-xs text-yellow-600">(Demo API)</span>
                 )}
               </span>
             ))
@@ -242,35 +201,20 @@ export const CryptoTicker = () => {
         )}
       </div>
 
-      {/* Sàn Giao Dịch */}
-      {exchanges && (
-        <div className="flex justify-center items-center gap-4 p-2 border-t w-full text-center">
-          <span className="font-bold text-sm">24h Volume:</span>
-          <div className="flex gap-4">
-            {exchanges.map((exchange) => (
-              <div key={exchange.id} className="flex items-center gap-2">
-                <img 
-                  src={exchange.image} 
-                  alt={exchange.name} 
-                  className="w-6 h-6 rounded-full"
-                  onError={(e) => {
-                    e.currentTarget.src = '/placeholder/24/24.jpg';
-                  }}
-                />
-                <span className="text-sm font-medium">
-                  {exchange.volume?.toFixed(2) ?? "N/A"} BTC
-                </span>
-              </div>
-            ))}
-          </div>
-          
-          {connectionStatus !== 'online' && (
-            <div className="ml-4">
-              <StatusIndicator />
-            </div>
-          )}
-        </div>
-      )}
+      {/* Attribution footer (required for Demo API) */}
+      <div className="bg-gray-50 py-1 px-4 text-center">
+        <span className="text-xs text-gray-500">
+          Data provided by{" "}
+          <a 
+            href="https://www.coingecko.com/en/api" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-emerald-600 hover:underline"
+          >
+            CoinGecko
+          </a>
+        </span>
+      </div>
     </div>
   );
 };

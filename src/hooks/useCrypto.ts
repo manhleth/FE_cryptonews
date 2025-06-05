@@ -1,7 +1,7 @@
 // src/hooks/useCrypto.ts
 import { useState, useEffect, useCallback } from 'react';
-import { cryptoAPI } from '@/services/cryptoApi';
-
+//import { cryptoAPI } from '@/services/cryptoApi';
+import { optimizedCryptoAPI } from '@/services/optimizedCryptoApi';
 interface UseCryptoReturn {
   coins: any[];
   loading: boolean;
@@ -24,16 +24,16 @@ export const useCrypto = (limit = 100): UseCryptoReturn => {
       setError(null);
       setConnectionStatus('online');
       
-      const data = await cryptoAPI.getTopCoins(limit);
+      const data = await optimizedCryptoAPI.getTopCoins(limit);
       
       if (data && data.length > 0) {
         setCoins(data);
         setLastUpdate(new Date());
         
         // Check if using fallback data
-        if (data[0]?.error) {
-          setConnectionStatus('limited');
-        }
+      if (data && data.length > 0 && 'fallback' in data[0]) {
+        setConnectionStatus('limited');
+      }
       }
     } catch (err: any) {
       console.error('Error fetching coins:', err);
@@ -80,7 +80,7 @@ export const useCoinPrices = (coinIds: string[]) => {
       setLoading(true);
       setError(null);
       
-      const data = await cryptoAPI.getCoinPrices(coinIds);
+      const data = await optimizedCryptoAPI.getCoinPrices(coinIds);
       
       const pricesMap: {[key: string]: any} = {};
       data.forEach((coin: any) => {
@@ -121,7 +121,7 @@ export const useCoinDetails = (coinId: string | null) => {
       setLoading(true);
       setError(null);
       
-      const data = await cryptoAPI.getCoinDetails(coinId);
+      const data = await optimizedCryptoAPI.getCoinDetails(coinId);
       setCoinDetail(data);
     } catch (err: any) {
       console.error('Error fetching coin details:', err);
@@ -156,7 +156,7 @@ export const usePriceHistory = (coinId: string, timeRange: string) => {
       setLoading(true);
       setError(null);
       
-      const data = await cryptoAPI.getCoinPriceHistory(coinId, timeRange);
+      const data = await optimizedCryptoAPI.getCoinPriceHistory(coinId, timeRange);
       
       const formattedData = data.prices?.map(([timestamp, price]: [number, number]) => ({
         timestamp,

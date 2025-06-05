@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import BlogHeader from '@/components/sections/news/BlogNewsHeader';
 import { useEffect, useState } from 'react';
 import { ArrowRight, TrendingUp, BookOpen, Star, ChevronRight } from 'lucide-react';
-import { TradingWidget } from '@/components/TradingWidget';
+import { OptimizedTradingWidget } from '@/components/OptimizedTradingWidget';
 import Link from 'next/link';
 
 // Định nghĩa interface cho dữ liệu tin tức
@@ -494,7 +494,7 @@ export default function Home() {
             
             {/* Sidebar - Trading Widget */}
             <div className="lg:col-span-1 hidden lg:block">
-              <TradingWidget />
+              <OptimizedTradingWidget />
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 // src/components/CryptoWatchlistManager.tsx
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,13 @@ import {
   Search, 
   Plus, 
   Trash2, 
-  RefreshCw,
+  Settings,
   Loader2,
+  Eye,
+  EyeOff,
+  RefreshCw,
   Heart,
-  BarChart3,
-  AlertTriangle
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +50,7 @@ interface CoinData {
   image: string;
   current_price: number;
   price_change_percentage_24h: number;
+  price_change_percentage_7d: number;
   market_cap: number;
   market_cap_rank: number;
   total_volume: number;
@@ -65,14 +68,7 @@ interface WatchlistItem {
   createdDate: string;
 }
 
-interface CoinPriceMap {
-  [coinId: string]: CoinData;
-}
-
 const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
-const CACHE_DURATION = 120000; // 2 phút
-const REFRESH_INTERVAL = 180000; // 3 phút
-const MAX_RETRY_ATTEMPTS = 2;
 
 export const CryptoWatchlistManager = () => {
   const { user, token } = useAuth();
@@ -80,61 +76,22 @@ export const CryptoWatchlistManager = () => {
 
   // States
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [coinPrices, setCoinPrices] = useState<CoinPriceMap>({});
+  const [coinPrices, setCoinPrices] = useState<{[key: string]: CoinData}>({});
   const [allCoins, setAllCoins] = useState<CoinData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingCoins, setIsLoadingCoins] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [updatingCoins, setUpdatingCoins] = useState<Set<string>>(new Set());
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null);
 
-  // Cache for API responses
-  const [priceCache, setPriceCache] = useState<Map<string, { data: CoinPriceMap; timestamp: number }>>(new Map());
-
-  // Optimized fetch với cache và retry logic
-  const fetchWithRetry = useCallback(async (url: string, maxRetries = MAX_RETRY_ATTEMPTS): Promise<any> => {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await fetch(url);
-        if (!response.ok) {
-          if (response.status === 429) {
-            // Rate limited - wait longer between retries
-            const delay = Math.pow(2, attempt) * 2000; // Exponential backoff
-            await new Promise(resolve => setTimeout(resolve, delay));
-            continue;
-          }
-          throw new Error(`HTTP ${response.status}`);
-        }
-        return await response.json();
-      } catch (error) {
-        if (attempt === maxRetries) throw error;
-        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-      }
+  // 🔧 FIX: Improved fetchWatchlist with better error handling and response structure check
+  const fetchWatchlist = async () => {
+    if (!user || !token) {
+      console.log("❌ No user or token available");
+      return;
     }
-  }, []);
-
-  // Optimized cache check
-  const getCachedPrices = useCallback((coinIds: string[]): CoinPriceMap | null => {
-    const cacheKey = coinIds.sort().join(',');
-    const cached = priceCache.get(cacheKey);
     
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      return cached.data;
-    }
-    return null;
-  }, [priceCache]);
-
-  // Set cache
-  const setCachedPrices = useCallback((coinIds: string[], data: CoinPriceMap) => {
-    const cacheKey = coinIds.sort().join(',');
-    setPriceCache(prev => new Map(prev.set(cacheKey, { data, timestamp: Date.now() })));
-  }, []);
-
-  // Optimized fetch watchlist
-  const fetchWatchlist = useCallback(async () => {
-    if (!user || !token) return [];
+    console.log("🔄 Fetching watchlist for user:", user.userId);
     
     try {
       const response = await fetch(
@@ -147,104 +104,109 @@ export const CryptoWatchlistManager = () => {
         }
       );
       
-      if (!response.ok) throw new Error('Failed to fetch watchlist');
+      console.log("📡 Watchlist API response status:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       
       const result = await response.json();
-      return Array.isArray(result) ? result : [];
-    } catch (error) {
-      console.error('Error fetching watchlist:', error);
-      return [];
-    }
-  }, [user, token]);
-
-  // Batch fetch coin prices với cache
-  const fetchCoinPrices = useCallback(async (coinIds: string[]) => {
-    if (coinIds.length === 0) return {};
-
-    // Check cache first
-    const cached = getCachedPrices(coinIds);
-    if (cached) {
-      setCoinPrices(cached);
-      return cached;
-    }
-
-    try {
-      const idsString = coinIds.join(',');
-      const data = await fetchWithRetry(
-        `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&ids=${idsString}&order=market_cap_desc&sparkline=false&price_change_percentage=24h`
-      );
+      console.log("📊 Watchlist API response data:", result);
       
-      const pricesMap: CoinPriceMap = {};
-      data.forEach((coin: CoinData) => {
-        pricesMap[coin.id] = coin;
-      });
+      // 🔧 FIX: Check for different response structures
+      let watchlistData: WatchlistItem[] = [];
       
-      setCoinPrices(pricesMap);
-      setCachedPrices(coinIds, pricesMap);
-      setLastUpdate(new Date());
-      setRetryCount(0);
+      if (result && result.statusCode === 1 && result.data) {
+        // Standard API response structure
+        watchlistData = Array.isArray(result.data) ? result.data : [];
+        console.log("✅ Using result.data:", watchlistData);
+      } else if (result && Array.isArray(result)) {
+        // Direct array response
+        watchlistData = result;
+        console.log("✅ Using direct array result:", watchlistData);
+      } else {
+        console.log("⚠️ No watchlist data found in response");
+        watchlistData = [];
+      }
       
-      return pricesMap;
+      setWatchlist(watchlistData);
+      console.log("✅ Watchlist state updated:", watchlistData.length, "items");
+      
+      // Fetch prices for watchlist coins
+      if (watchlistData.length > 0) {
+        const coinIds = watchlistData.map((item: WatchlistItem) => item.coinId).join(',');
+        console.log("🔄 Fetching prices for coins:", coinIds);
+        await fetchCoinPrices(coinIds);
+      }
     } catch (error) {
-      console.error('Error fetching coin prices:', error);
-      setRetryCount(prev => prev + 1);
-      return {};
-    }
-  }, [fetchWithRetry, getCachedPrices, setCachedPrices]);
-
-  // Optimized fetch all coins với debounce
-  const fetchAllCoins = useCallback(async () => {
-    setIsLoadingCoins(true);
-    try {
-      const data = await fetchWithRetry(
-        `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`
-      );
-      setAllCoins(data || []);
-    } catch (error) {
-      console.error('Error fetching all coins:', error);
-      setAllCoins([]);
+      console.error('❌ Error fetching watchlist:', error);
       toast({
-        title: "Không thể tải danh sách coin",
-        description: "Vui lòng thử lại sau",
+        title: "Lỗi",
+        description: "Không thể tải danh sách theo dõi. Vui lòng thử lại.",
         variant: "destructive",
         duration: 3000
       });
-    } finally {
-      setIsLoadingCoins(false);
     }
-  }, [fetchWithRetry, toast]);
+  };
 
-  // Optimistic update cho add/remove operations
-  const updateWatchlistOptimistic = useCallback((coinId: string, action: 'add' | 'remove', coinData?: CoinData) => {
-    setWatchlist(prev => {
-      if (action === 'add' && coinData) {
-        const newItem: WatchlistItem = {
-          watchlistId: Date.now(), // Temporary ID
-          userId: user!.userId,
-          coinId: coinData.id,
-          coinSymbol: coinData.symbol,
-          coinName: coinData.name,
-          coinImage: coinData.image,
-          order: prev.length + 1,
-          isActive: true,
-          createdDate: new Date().toISOString()
-        };
-        return [...prev, newItem];
-      } else if (action === 'remove') {
-        return prev.filter(item => item.coinId !== coinId);
+  // 🔧 FIX: Improved fetchCoinPrices with better error handling
+  const fetchCoinPrices = async (coinIds: string) => {
+    try {
+      console.log("🔄 Fetching coin prices for:", coinIds);
+      
+      const response = await fetch(
+        `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&ids=${coinIds}&order=market_cap_desc&sparkline=false&price_change_percentage=24h,7d`
+      );
+      
+      console.log("📡 CoinGecko prices response status:", response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch prices: ${response.status}`);
       }
-      return prev;
-    });
-  }, [user]);
+      
+      const data = await response.json();
+      console.log("📊 CoinGecko prices data:", data);
+      
+      const pricesMap: {[key: string]: CoinData} = {};
+      
+      if (Array.isArray(data)) {
+        data.forEach((coin: CoinData) => {
+          pricesMap[coin.id] = coin;
+        });
+        
+        setCoinPrices(pricesMap);
+        console.log("✅ Coin prices updated:", Object.keys(pricesMap).length, "coins");
+      } else {
+        console.log("⚠️ Invalid coin prices data structure");
+      }
+      
+    } catch (error) {
+      console.error('❌ Error fetching coin prices:', error);
+      // Don't show toast for price errors, as watchlist should still show without prices
+    }
+  };
 
-  // Optimized add to watchlist
-  const addToWatchlist = useCallback(async (coin: CoinData) => {
+  // Fetch all coins for search
+  const fetchAllCoins = async () => {
+    try {
+      const response = await fetch(
+        `${COINGECKO_API_BASE}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false`
+      );
+      
+      if (!response.ok) throw new Error('Failed to fetch coins');
+      
+      const data = await response.json();
+      setAllCoins(data);
+    } catch (error) {
+      console.error('Error fetching all coins:', error);
+    }
+  };
+
+  // 🔧 FIX: Improved addToWatchlist with better response handling
+  const addToWatchlist = async (coin: CoinData) => {
     if (!user || !token) return;
     
-    setUpdatingCoins(prev => new Set(prev).add(coin.id));
-    
-    // Optimistic update
-    updateWatchlistOptimistic(coin.id, 'add', coin);
+    setIsUpdating(coin.id);
     
     try {
       const watchlistData = {
@@ -254,6 +216,8 @@ export const CryptoWatchlistManager = () => {
         coinImage: coin.image,
         order: watchlist.length + 1
       };
+      
+      console.log("🔄 Adding to watchlist:", watchlistData);
       
       const response = await fetch(
         `http://localhost:5000/api/Watchlist/AddToWatchlist?userId=${user.userId}`,
@@ -267,20 +231,17 @@ export const CryptoWatchlistManager = () => {
         }
       );
       
-      if (!response.ok) {
-        // Revert optimistic update
-        updateWatchlistOptimistic(coin.id, 'remove');
-        throw new Error('Failed to add to watchlist');
-      }
-
-      const result = await response.json();
+      console.log("📡 Add to watchlist response status:", response.status);
       
-      // Check if coin already existed (was re-activated)
-      if (result.statusCode === 0 && result.data?.includes("already exists")) {
-        // If coin already exists but was inactive, try to toggle it
-        await toggleExistingCoin(coin);
-        return;
+      if (!response.ok) {
+        throw new Error(`Failed to add to watchlist: ${response.status}`);
       }
+      
+      const result = await response.json();
+      console.log("📊 Add to watchlist response:", result);
+      
+      // 🔧 FIX: Always refresh watchlist after adding
+      await fetchWatchlist();
       
       toast({
         title: "Đã thêm vào watchlist",
@@ -289,7 +250,7 @@ export const CryptoWatchlistManager = () => {
       });
       
     } catch (error) {
-      console.error('Error adding to watchlist:', error);
+      console.error('❌ Error adding to watchlist:', error);
       toast({
         title: "Lỗi",
         description: "Không thể thêm vào watchlist",
@@ -297,63 +258,19 @@ export const CryptoWatchlistManager = () => {
         duration: 3000
       });
     } finally {
-      setUpdatingCoins(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(coin.id);
-        return newSet;
-      });
+      setIsUpdating(null);
     }
-  }, [user, token, watchlist.length, updateWatchlistOptimistic, toast]);
+  };
 
-  // Helper function to handle existing but inactive coins
-  const toggleExistingCoin = useCallback(async (coin: CoinData) => {
-    try {
-      const watchlistData = {
-        coinId: coin.id,
-        coinSymbol: coin.symbol,
-        coinName: coin.name,
-        coinImage: coin.image,
-        order: watchlist.length + 1
-      };
-
-      const response = await fetch(
-        `http://localhost:5000/api/Watchlist/ToggleWatchlist?userId=${user!.userId}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(watchlistData)
-        }
-      );
-
-      if (response.ok) {
-        // Refresh watchlist to get accurate data
-        const freshWatchlist = await fetchWatchlist();
-        setWatchlist(freshWatchlist);
-        
-        toast({
-          title: "Đã thêm lại vào watchlist",
-          description: `${coin.name} đã được thêm lại vào danh sách theo dõi`,
-          duration: 2000
-        });
-      }
-    } catch (error) {
-      console.error('Error toggling existing coin:', error);
-    }
-  }, [user, token, watchlist.length, fetchWatchlist, toast]);
-
-  // Optimized remove from watchlist
-  const removeFromWatchlist = useCallback(async (coinId: string, coinName: string) => {
+  // 🔧 FIX: Improved removeFromWatchlist
+  const removeFromWatchlist = async (coinId: string, coinName: string) => {
     if (!user || !token) return;
     
-    setUpdatingCoins(prev => new Set(prev).add(coinId));
-    
-    // Optimistic update
-    updateWatchlistOptimistic(coinId, 'remove');
+    setIsUpdating(coinId);
     
     try {
+      console.log("🔄 Removing from watchlist:", coinId);
+      
       const response = await fetch(
         `http://localhost:5000/api/Watchlist/RemoveFromWatchlist?userId=${user.userId}&coinId=${coinId}`,
         {
@@ -365,12 +282,17 @@ export const CryptoWatchlistManager = () => {
         }
       );
       
+      console.log("📡 Remove from watchlist response status:", response.status);
+      
       if (!response.ok) {
-        // Revert bằng cách fetch lại
-        const freshWatchlist = await fetchWatchlist();
-        setWatchlist(freshWatchlist);
-        throw new Error('Failed to remove from watchlist');
+        throw new Error(`Failed to remove from watchlist: ${response.status}`);
       }
+      
+      const result = await response.json();
+      console.log("📊 Remove from watchlist response:", result);
+      
+      // 🔧 FIX: Always refresh watchlist after removing
+      await fetchWatchlist();
       
       toast({
         title: "Đã xóa khỏi watchlist",
@@ -379,7 +301,7 @@ export const CryptoWatchlistManager = () => {
       });
       
     } catch (error) {
-      console.error('Error removing from watchlist:', error);
+      console.error('❌ Error removing from watchlist:', error);
       toast({
         title: "Lỗi",
         description: "Không thể xóa khỏi watchlist",
@@ -387,82 +309,74 @@ export const CryptoWatchlistManager = () => {
         duration: 3000
       });
     } finally {
-      setUpdatingCoins(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(coinId);
-        return newSet;
-      });
+      setIsUpdating(null);
     }
-  }, [user, token, updateWatchlistOptimistic, fetchWatchlist, toast]);
+  };
 
-  // Memoized calculations
-  const isInWatchlist = useCallback((coinId: string) => {
-    return watchlist.some(item => item.coinId === coinId);
-  }, [watchlist]);
+  // Check if coin is in watchlist
+  const isInWatchlist = (coinId: string) => {
+    const result = watchlist.some(item => item.coinId === coinId);
+    console.log(`🔍 Checking if ${coinId} is in watchlist:`, result);
+    return result;
+  };
 
-  const filteredCoins = useMemo(() => {
-    return allCoins.filter(coin => 
-      !isInWatchlist(coin.id) && (
-        coin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        coin.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-  }, [allCoins, isInWatchlist, searchTerm]);
-
-  const formatPrice = useCallback((price: number) => {
+  // Format price
+  const formatPrice = (price: number) => {
     if (price >= 1) {
       return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     } else {
       return `$${price.toFixed(6)}`;
     }
-  }, []);
+  };
 
-  const formatMarketCap = useCallback((marketCap: number) => {
+  // Format market cap
+  const formatMarketCap = (marketCap: number) => {
     if (marketCap >= 1e12) return `$${(marketCap / 1e12).toFixed(2)}T`;
     if (marketCap >= 1e9) return `$${(marketCap / 1e9).toFixed(2)}B`;
     if (marketCap >= 1e6) return `$${(marketCap / 1e6).toFixed(2)}M`;
     return `$${marketCap.toLocaleString()}`;
-  }, []);
+  };
 
-  // Initial data loading
+  // Filter coins for search
+  const filteredCoins = allCoins.filter(coin => 
+    !isInWatchlist(coin.id) && (
+      coin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      coin.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  );
+
+  // 🔧 FIX: Improved useEffect with better logging
   useEffect(() => {
+    console.log("🔄 Initial load - User:", !!user, "Token:", !!token);
+    
     if (user && token) {
       setIsLoading(true);
       Promise.all([
-        fetchWatchlist().then(setWatchlist),
+        fetchWatchlist(),
         fetchAllCoins()
-      ]).finally(() => setIsLoading(false));
+      ]).finally(() => {
+        console.log("✅ Initial load completed");
+        setIsLoading(false);
+      });
+    } else {
+      console.log("⚠️ No user or token, skipping initial load");
+      setIsLoading(false);
     }
-  }, [user, token, fetchWatchlist, fetchAllCoins]);
+  }, [user, token]);
 
-  // Auto fetch prices when watchlist changes
+  // Auto refresh prices every 30 seconds
   useEffect(() => {
     if (watchlist.length > 0) {
-      const coinIds = watchlist.map(item => item.coinId);
-      fetchCoinPrices(coinIds);
+      const interval = setInterval(() => {
+        const coinIds = watchlist.map(item => item.coinId).join(',');
+        fetchCoinPrices(coinIds);
+      }, 30000);
+      
+      return () => clearInterval(interval);
     }
-  }, [watchlist, fetchCoinPrices]);
+  }, [watchlist]);
 
-  // Optimized auto refresh - 3 phút interval
-  useEffect(() => {
-    if (watchlist.length === 0) return;
-
-    const interval = setInterval(() => {
-      const coinIds = watchlist.map(item => item.coinId);
-      fetchCoinPrices(coinIds);
-    }, REFRESH_INTERVAL);
-    
-    return () => clearInterval(interval);
-  }, [watchlist, fetchCoinPrices]);
-
-  // Manual refresh with rate limiting
-  const handleRefresh = useCallback(() => {
-    if (watchlist.length > 0) {
-      const coinIds = watchlist.map(item => item.coinId);
-      fetchCoinPrices(coinIds);
-    }
-  }, [watchlist, fetchCoinPrices]);
-
+  // 🔧 FIX: Better loading state
   if (!user) {
     return (
       <Card className="w-full max-w-4xl mx-auto">
@@ -504,19 +418,8 @@ export const CryptoWatchlistManager = () => {
                 <Star className="h-6 w-6 text-yellow-500 mr-2 fill-current" />
                 Danh sách theo dõi
               </CardTitle>
-              <p className="text-gray-600 mt-1 flex items-center gap-2">
-                Theo dõi {watchlist.length} đồng coin yêu thích
-                {lastUpdate && (
-                  <span className="text-xs text-gray-400">
-                    • Cập nhật {Math.floor((Date.now() - lastUpdate.getTime()) / 60000)} phút trước
-                  </span>
-                )}
-                {retryCount > 0 && (
-                  <span className="flex items-center text-xs text-yellow-600">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    Kết nối chậm
-                  </span>
-                )}
+              <p className="text-gray-600 mt-1">
+                Theo dõi {watchlist.length} đồng coin yêu thích của bạn
               </p>
             </div>
             
@@ -524,7 +427,7 @@ export const CryptoWatchlistManager = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRefresh}
+                onClick={fetchWatchlist}
                 className="h-9"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -555,12 +458,7 @@ export const CryptoWatchlistManager = () => {
                     </div>
                     
                     <div className="max-h-64 overflow-y-auto space-y-2">
-                      {isLoadingCoins ? (
-                        <div className="flex justify-center py-8">
-                          <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
-                          <span className="ml-2 text-gray-600">Đang tải danh sách coin...</span>
-                        </div>
-                      ) : filteredCoins.length > 0 ? (
+                      {filteredCoins.length > 0 ? (
                         filteredCoins.slice(0, 20).map((coin) => (
                           <div
                             key={coin.id}
@@ -592,10 +490,10 @@ export const CryptoWatchlistManager = () => {
                               <Button
                                 size="sm"
                                 onClick={() => addToWatchlist(coin)}
-                                disabled={updatingCoins.has(coin.id)}
+                                disabled={isUpdating === coin.id}
                                 className="bg-emerald-600 hover:bg-emerald-700"
                               >
-                                {updatingCoins.has(coin.id) ? (
+                                {isUpdating === coin.id ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <Plus className="h-4 w-4" />
@@ -671,9 +569,9 @@ export const CryptoWatchlistManager = () => {
                           variant="ghost" 
                           size="sm"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          disabled={updatingCoins.has(item.coinId)}
+                          disabled={isUpdating === item.coinId}
                         >
-                          {updatingCoins.has(item.coinId) ? (
+                          {isUpdating === item.coinId ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <Trash2 className="h-4 w-4" />

@@ -98,7 +98,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm border-0 shadow-none">
         <CardHeader className="space-y-2 text-center">
           <CardTitle className="text-2xl font-semibold">
-            Đăng nhập All-in Crypto Insights
+            Đăng nhập vào All-in Crypto Insights
           </CardTitle>
         </CardHeader>
 
@@ -158,7 +158,7 @@ export default function LoginPage() {
                     </div>
                     <div className="text-right">
                       <a
-                        href="#"
+                        href="/User/ForgotPassword"
                         className="text-sm text-gray-500 hover:underline"
                       >
                         Quên mật khẩu?

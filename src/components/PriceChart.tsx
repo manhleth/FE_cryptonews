@@ -19,23 +19,23 @@ export const PriceChart: React.FC<PriceChartProps> = ({
   if (!data || data.length === 0) {
     return (
       <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
-        <p className="text-gray-500">No chart data available</p>
+        <p className="text-gray-500">Không có dữ liệu biểu đồ</p>
       </div>
     );
   }
 
-  // Calculate min and max prices for scaling
+  // Tính toán giá min và max để scale
   const prices = data.map(d => d.price);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
   const priceRange = maxPrice - minPrice;
 
-  // SVG dimensions
+  // Kích thước SVG
   const width = 800;
   const height = 400;
   const padding = 40;
 
-  // Create SVG path
+  // Tạo đường path SVG
   const createPath = () => {
     const points = data.map((point, index) => {
       const x = padding + (index / (data.length - 1)) * (width - 2 * padding);
@@ -46,7 +46,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     return `M ${points.join(' L ')}`;
   };
 
-  // Create area path (for fill)
+  // Tạo đường path cho vùng tô màu
   const createAreaPath = () => {
     const points = data.map((point, index) => {
       const x = padding + (index / (data.length - 1)) * (width - 2 * padding);
@@ -58,6 +58,40 @@ export const PriceChart: React.FC<PriceChartProps> = ({
     return areaPath;
   };
 
+  // Format giá theo định dạng Việt Nam
+  const formatPrice = (price: number) => {
+    if (price >= 1) {
+      return price.toLocaleString('vi-VN', { 
+        style: 'currency', 
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2 
+      });
+    } else {
+      return `$${price.toFixed(6)}`;
+    }
+  };
+
+  // Format ngày theo định dạng Việt Nam
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  // Format thời gian chi tiết
+  const formatDateTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <div className="h-96 bg-white rounded-lg p-4">
       <svg
@@ -66,7 +100,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
         viewBox={`0 0 ${width} ${height}`}
         className="overflow-visible"
       >
-        {/* Grid lines */}
+        {/* Lưới nền */}
         <defs>
           <pattern
             id="grid"
@@ -84,7 +118,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
         </defs>
         <rect width="100%" height="100%" fill="url(#grid)" />
 
-        {/* Gradient definition */}
+        {/* Định nghĩa gradient */}
         <defs>
           <linearGradient id="priceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={color} stopOpacity="0.3" />
@@ -92,13 +126,13 @@ export const PriceChart: React.FC<PriceChartProps> = ({
           </linearGradient>
         </defs>
 
-        {/* Area fill */}
+        {/* Vùng tô màu */}
         <path
           d={createAreaPath()}
           fill="url(#priceGradient)"
         />
 
-        {/* Price line */}
+        {/* Đường giá */}
         <path
           d={createPath()}
           fill="none"
@@ -108,7 +142,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({
           strokeLinejoin="round"
         />
 
-        {/* Data points */}
+        {/* Các điểm dữ liệu */}
         {data.map((point, index) => {
           const x = padding + (index / (data.length - 1)) * (width - 2 * padding);
           const y = height - padding - ((point.price - minPrice) / priceRange) * (height - 2 * padding);
@@ -124,20 +158,20 @@ export const PriceChart: React.FC<PriceChartProps> = ({
               className="hover:opacity-100 hover:r-4 transition-all cursor-pointer"
             >
               <title>
-                {new Date(point.timestamp).toLocaleDateString()}: ${point.price.toFixed(4)}
+                {formatDateTime(point.timestamp)}: {formatPrice(point.price)}
               </title>
             </circle>
           );
         })}
 
-        {/* Y-axis labels */}
+        {/* Nhãn trục Y */}
         <text
           x={padding - 10}
           y={padding}
           textAnchor="end"
           className="text-xs fill-gray-600"
         >
-          ${maxPrice.toFixed(2)}
+          {formatPrice(maxPrice)}
         </text>
         <text
           x={padding - 10}
@@ -145,7 +179,39 @@ export const PriceChart: React.FC<PriceChartProps> = ({
           textAnchor="end"
           className="text-xs fill-gray-600"
         >
-          ${minPrice.toFixed(2)}
+          {formatPrice(minPrice)}
+        </text>
+
+        {/* Nhãn trục X - hiển thị ngày đầu và cuối */}
+        {data.length > 0 && (
+          <>
+            <text
+              x={padding}
+              y={height - 10}
+              textAnchor="start"
+              className="text-xs fill-gray-600"
+            >
+              {formatDate(data[0].timestamp)}
+            </text>
+            <text
+              x={width - padding}
+              y={height - 10}
+              textAnchor="end"
+              className="text-xs fill-gray-600"
+            >
+              {formatDate(data[data.length - 1].timestamp)}
+            </text>
+          </>
+        )}
+
+        {/* Chú thích */}
+        <text
+          x={width / 2}
+          y={30}
+          textAnchor="middle"
+          className="text-sm fill-gray-700 font-medium"
+        >
+          Biểu đồ giá ({data.length} điểm dữ liệu)
         </text>
       </svg>
     </div>

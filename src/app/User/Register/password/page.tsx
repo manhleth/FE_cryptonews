@@ -24,14 +24,14 @@ const passwordSchema = z
   .object({
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
-      .regex(/[A-Z]/, "Must have at least 1 upper case letter")
-      .regex(/\d/, "Must have at least 1 digit")
-      .regex(/[^A-Za-z0-9]/, "Must have at least 1 special character"),
+      .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
+      .regex(/[A-Z]/, "Phải có ít nhất 1 chữ hoa")
+      .regex(/\d/, "Phải có ít nhất 1 chữ số")
+      .regex(/[^A-Za-z0-9]/, "Phải có ít nhất 1 ký tự đặc biệt"),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: "Password doesn't match",
+    message: "Mật khẩu không khớp",
     path: ["confirmPassword"], // lỗi gắn cho confirmPassword
   });
 
