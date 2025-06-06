@@ -18,6 +18,7 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const {login} = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +37,7 @@ export default function AdminLoginPage() {
       }
 
       const data = await response.json();
+      login(data.data.tokenGen, data.data.user);
       console.log(data.data.user);
       
       if (data.data.user.roleId === 1) {

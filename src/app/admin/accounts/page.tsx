@@ -3,13 +3,13 @@
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { 
-  Users, 
-  Edit3, 
-  Trash2, 
-  Save, 
-  X, 
-  UserCheck, 
+import {
+  Users,
+  Edit3,
+  Trash2,
+  Save,
+  X,
+  UserCheck,
   UserX,
   Search,
   Filter,
@@ -53,7 +53,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const { toast } = useToast();
   const { token } = useAuth();
-  
+
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -61,20 +61,21 @@ export default function UsersPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   // Lấy danh sách người dùng từ API khi component mount
+
+  const valueToken = localStorage.getItem("tokenAdmin");
   useEffect(() => {
     fetchUsers();
-  }, []);
-
+  }, [valueToken]);
   // Filter and search effect
   useEffect(() => {
     let filtered = users.filter(user => {
-      const matchesSearch = 
+      const matchesSearch =
         user.fullname.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.username.toLowerCase().includes(searchTerm.toLowerCase());
-      
+
       const matchesRole = roleFilter === "all" || user.role === roleFilter;
-      
+
       return matchesSearch && matchesRole;
     });
 
@@ -82,7 +83,7 @@ export default function UsersPage() {
     filtered.sort((a, b) => {
       const aValue = a[sortField];
       const bValue = b[sortField];
-      
+
       if (sortDirection === 'asc') {
         return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       } else {
@@ -163,10 +164,10 @@ export default function UsersPage() {
   // Hàm cập nhật vai trò người dùng qua API sử dụng endpoint SetAdminRole hoặc SetUserRole
   const handleUpdateRole = async () => {
     if (!editingUser) return;
-  
+
     const roleChange = newRole === "admin" ? 1 : 0;
     const url = `http://localhost:5000/api/User/SetAdminRole?UserID=${editingUser.id}&RoleChange=${roleChange}`
-  
+
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -176,7 +177,7 @@ export default function UsersPage() {
         },
         body: JSON.stringify({ UserID: editingUser.id }),
       });
-  
+
       const result = await response.json();
       console.log("✅ API Response:", result);
       toast({
@@ -184,11 +185,11 @@ export default function UsersPage() {
         description: "Role updated successfully",
         duration: 3000
       });
-      
+
       if (!response.ok || result.statusCode !== 1) {
         throw new Error(result.message || "Cập nhật vai trò không thành công");
       }
-  
+
       // Làm mới danh sách người dùng và thoát khỏi chế độ chỉnh sửa
       fetchUsers();
       setEditingUser(null);
@@ -203,7 +204,7 @@ export default function UsersPage() {
       });
     }
   };
-  
+
   // Hàm hủy chỉnh sửa
   const handleCancelEdit = () => {
     setEditingUser(null);
@@ -229,8 +230,8 @@ export default function UsersPage() {
   };
 
   const getRoleBadgeClass = (role: string) => {
-    return role === 'admin' 
-      ? 'bg-purple-100 text-purple-800 border-purple-200' 
+    return role === 'admin'
+      ? 'bg-purple-100 text-purple-800 border-purple-200'
       : 'bg-blue-100 text-blue-800 border-blue-200';
   };
 
@@ -452,8 +453,8 @@ export default function UsersPage() {
                         <Users className="w-6 h-6 text-gray-400" />
                       </div>
                       <p className="text-gray-500">
-                        {searchTerm || roleFilter !== "all" 
-                          ? "Không tìm thấy người dùng phù hợp" 
+                        {searchTerm || roleFilter !== "all"
+                          ? "Không tìm thấy người dùng phù hợp"
                           : "Chưa có người dùng nào"}
                       </p>
                     </div>
