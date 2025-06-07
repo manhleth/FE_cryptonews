@@ -1,24 +1,31 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import {
-  FileText,
+
+import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Star,
+  StarOff,
+  Edit3,
+  Trash2,
   Search,
   Filter,
-  Trash2,
   Eye,
   Calendar,
   User,
   Clock,
-  MoreVertical,
-  AlertCircle,
-  Check,
-  TrendingUp,
-  Edit,
-  Save,
+  Tag,
   X,
-  Loader2,
-  Star,
-  StarOff
+  Save,
+  AlertTriangle,
+  CheckCircle,
+  FileText,
+  ChevronUp,
+  ChevronDown,
+  MoreVertical
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -26,641 +33,377 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/context/AuthContext";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
-type Article = {
-  id: number;
+interface NewsItem {
   newsId: number;
-  title: string;
-  content: string;
-  published: boolean;
-  author?: string;
-  createdAt?: string;
-  views?: number;
-  category?: string;
-  excerpt?: string;
-  image?: string;
-  header?: string;
-  footer?: string;
-  timeReading?: number;
-  links?: string;
-  categoryId?: number;
-  childrenCategoryId?: number;
-  imagesLink?: string;
-};
-
-type FilterType = 'all' | 'published' | 'draft';
-
-interface Category {
-  categoryId: number;
-  categoryName: string;
-}
-
-interface ChildrenCategory {
-  childrenCategoryID: number;
-  childrenCategoryName: string;
-  parentCategoryId: number;
-}
-
-// Interface for edit form data
-interface EditFormData {
   header: string;
   title: string;
   content: string;
   footer: string;
-  timeReading: string;
-  links: string;
-  selectedCategory: string;
-  selectedChildCategory: string;
-  imageUrl: string;
+  timeReading: number;
+  userName: string;
+  avatar?: string;
+  categoryId: number;
+  imagesLink: string;
+  links?: string;
+  userId: number;
+  childrenCategoryId?: number;
+  createdDate: string;
+  modifiedDate?: string;
+  isFeatured?: boolean;
+  featuredOrder?: number;
 }
 
-export default function NewsPage() {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+interface EditFormData {
+  newsId: number;
+  header: string;
+  title: string;
+  content: string;
+  footer: string;
+  timeReading: number;
+}
+
+type SortField = 'newsId' | 'header' | 'userName' | 'createdDate' | 'categoryId';
+type SortDirection = 'asc' | 'desc';
+
+export default function AdminNewsPage() {
+  // States
+  const [newsList, setNewsList] = useState<NewsItem[]>([]);
+  const [featuredNews, setFeaturedNews] = useState<NewsItem[]>([]);
+  const [filteredNews, setFilteredNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedArticles, setSelectedArticles] = useState<number[]>([]);
-  const [featuredNewsIds, setFeaturedNewsIds] = useState<number[]>([]);
-
-  // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState<FilterType>('all');
-
-  // Edit modal states
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedNewsId, setSelectedNewsId] = useState<number | null>(null);
-
-  // Edit form state
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [sortField, setSortField] = useState<SortField>('createdDate');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  
+  // Modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [editFormData, setEditFormData] = useState<EditFormData>({
+    newsId: 0,
     header: "",
     title: "",
     content: "",
     footer: "",
-    timeReading: "",
-    links: "",
-    selectedCategory: "",
-    selectedChildCategory: "",
-    imageUrl: ""
+    timeReading: 1
   });
-
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [editLoading, setEditLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [childCategories, setChildCategories] = useState<ChildrenCategory[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { toast } = useToast();
-  const { token } = useAuth();
 
-  const valueToken = sessionStorage.getItem("token");
+  // Get admin token
+  const adminToken = typeof window !== 'undefined' ? localStorage.getItem("tokenAdmin") : null;
 
+  // Categories state - will be loaded from API
+  const [categories, setCategories] = useState<{id: number, name: string}[]>([]);
+
+  // Load categories from API
   useEffect(() => {
-    fetchNews();
-    console.log("tokenAdmin:", valueToken);
-    fetchFeaturedNews();
-  }, [valueToken]);
+    const loadCategories = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/Category/GetAllCategories");
+        if (response.ok) {
+          const result = await response.json();
+          if (result.statusCode === 1 && result.data) {
+            setCategories(result.data.map((cat: any) => ({
+              id: cat.categoryId,
+              name: cat.categoryName
+            })));
+          }
+        }
+      } catch (error) {
+        console.error("Error loading categories:", error);
+      }
+    };
 
+    if (adminToken) {
+      loadNews();
+      loadFeaturedNews();
+      loadCategories();
+    }
+  }, [adminToken]);
+
+  // Filter and search effect
   useEffect(() => {
-    let filtered = articles;
+    let filtered = newsList;
 
-    if (filterType === 'published') {
-      filtered = filtered.filter(a => a.published);
-    } else if (filterType === 'draft') {
-      filtered = filtered.filter(a => !a.published);
+    // Filter by category
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(news => news.categoryId.toString() === selectedCategory);
     }
 
+    // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(a =>
-        a.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.content?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.author?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        a.category?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(news => 
+        news.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        news.header.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        news.userName.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    setFilteredArticles(filtered);
-  }, [articles, filterType, searchTerm]);
+    // Sort
+    filtered.sort((a, b) => {
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
 
-  useEffect(() => {
-    if (error || success) {
-      const timer = setTimeout(() => {
-        setError("");
-        setSuccess("");
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error, success]);
+      if (sortField === 'createdDate') {
+        aValue = new Date(aValue).getTime();
+        bValue = new Date(bValue).getTime();
+      }
 
-  useEffect(() => {
-    if (editFormData.selectedCategory && isEditModalOpen) {
-      fetchChildCategories(editFormData.selectedCategory);
-    } else {
-      setChildCategories([]);
-    }
-  }, [editFormData.selectedCategory, isEditModalOpen]);
+      if (sortDirection === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
 
-  useEffect(() => {
-    if (isEditModalOpen && selectedNewsId) {
-      fetchNewsDetails();
-      fetchCategories();
-    }
-  }, [isEditModalOpen, selectedNewsId]);
+    setFilteredNews(filtered);
+  }, [newsList, selectedCategory, searchTerm, sortField, sortDirection]);
 
-  const fetchNews = async () => {
-    setLoading(true);
+  // API calls
+  const loadNews = async () => {
     try {
+      setLoading(true);
       const response = await fetch("http://localhost:5000/api/News/GetAllNewAdmin", {
         headers: {
+          "Authorization": `Bearer ${adminToken}`,
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${valueToken}`,
         },
       });
-      if (!response.ok) {
-        throw new Error("Lỗi khi lấy danh sách tin tức");
-      }
-      const result = await response.json();
-      if (result.statusCode !== 1 || !result.data) {
-        throw new Error("Lỗi dữ liệu từ API");
-      }
-      const mappedArticles: Article[] = result.data.map((item: any) => ({
-        id: item.newsId,
-        newsId: item.newsId,
-        title: item.title || "",
-        content: item.content || "",
-        published: true,
-        author: item.userName || item.author || "",
-        createdAt: item.createdDate || "",
-        views: Math.floor(Math.random() * 10000),
-        category: item.categoryName || "",
-        excerpt: item.header || "",
-        image: item.imagesLink || "",
-        header: item.header || "",
-        footer: item.footer || "",
-        timeReading: item.timeReading,
-        links: item.links || "",
-        categoryId: item.categoryId,
-        childrenCategoryId: item.childrenCategoryId,
-        imagesLink: item.imagesLink || ""
-      }));
-      setArticles(mappedArticles);
-      setLoading(false);
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-    }
-  };
-
-  const fetchFeaturedNews = async () => {
-    try {
-      const response = await fetch("http://localhost:5000/api/News/GetFeaturedNews");
-      if (response.ok) {
-        const result = await response.json();
-        if (result.statusCode === 1 && result.data) {
-          const featuredIds = result.data.map((item: any) => item.newsId);
-          setFeaturedNewsIds(featuredIds);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching featured news:", error);
-    }
-  };
-
-  const fetchNewsDetails = async () => {
-    if (!selectedNewsId) return;
-
-    setEditLoading(true);
-    try {
-      const response = await fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${selectedNewsId}`, {
-        headers: {
-          "Authorization": `Bearer ${valueToken}`
-        }
-      });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        throw new Error("Lỗi khi tải danh sách tin tức");
       }
 
       const result = await response.json();
-
       if (result.statusCode === 1 && result.data) {
-        const newsData = result.data;
-
-        // Update form data with fetched news details
-        setEditFormData({
-          header: newsData.header || "",
-          title: newsData.title || "",
-          content: newsData.content || "",
-          footer: newsData.footer || "",
-          timeReading: newsData.timeReading?.toString() || "",
-          links: newsData.links || "",
-          selectedCategory: newsData.categoryId?.toString() || "",
-          selectedChildCategory: newsData.childrenCategoryId?.toString() || "",
-          imageUrl: newsData.imagesLink || ""
-        });
-
-        setImagePreview(newsData.imagesLink || null);
+        setNewsList(result.data);
       } else {
-        toast({
-          title: "Lỗi",
-          description: "Không thể tải thông tin bài viết",
-          variant: "destructive",
-          duration: 3000
-        });
+        throw new Error("Dữ liệu không hợp lệ");
       }
-    } catch (error) {
-      console.error("Error fetching news details:", error);
+    } catch (error: any) {
+      console.error("Error loading news:", error);
       toast({
         title: "Lỗi",
-        description: "Có lỗi xảy ra khi tải thông tin bài viết",
+        description: error.message || "Không thể tải danh sách tin tức",
         variant: "destructive",
         duration: 3000
       });
     } finally {
-      setEditLoading(false);
+      setLoading(false);
     }
   };
 
-  const fetchCategories = async () => {
+  const loadFeaturedNews = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/Category/GetAllCategories");
-      const result = await response.json();
-
-      if (result.statusCode === 1 && result.data) {
-        setCategories(result.data);
-      }
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    }
-  };
-
-  const fetchChildCategories = async (parentId: string) => {
-    try {
-      const response = await fetch(
-        `http://localhost:5000/api/ChildrenCategory/GetChildrenCategoriesByParenID?ParentID=${parentId}`, {
-        headers: {
-          "Authorization": `Bearer ${valueToken}`
+      const response = await fetch("http://localhost:5000/api/News/GetFeaturedNews");
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.statusCode === 1 && result.data) {
+          setFeaturedNews(result.data);
         }
       }
+    } catch (error) {
+      console.error("Error loading featured news:", error);
+    }
+  };
+
+  const handleSetFeatured = async (newsId: number, isFeatured: boolean) => {
+    try {
+      if (isFeatured && featuredNews.length >= 2) {
+        toast({
+          title: "Giới hạn đạt",
+          description: "Đã đạt giới hạn 2 tin tức nổi bật. Vui lòng bỏ chọn một bài viết khác trước.",
+          variant: "destructive",
+          duration: 3000
+        });
+        return;
+      }
+
+      const response = await fetch(
+        `http://localhost:5000/api/News/SetFeaturedNews?newsId=${newsId}&isFeatured=${isFeatured}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${adminToken}`,
+          },
+        }
       );
 
       const result = await response.json();
-
-      if (result.statusCode === 1 && result.data) {
-        setChildCategories(result.data);
+      
+      if (response.ok && result.statusCode === 1) {
+        // Update local state
+        setNewsList(prev => prev.map(news => 
+          news.newsId === newsId 
+            ? { ...news, isFeatured, featuredOrder: isFeatured ? (featuredNews.length + 1) : undefined }
+            : news
+        ));
+        
+        // Reload featured news
+        loadFeaturedNews();
+        
+        toast({
+          title: "Thành công",
+          description: isFeatured ? "Đã đặt tin tức nổi bật" : "Đã bỏ tin tức nổi bật",
+          duration: 3000
+        });
+      } else {
+        throw new Error(result.message || "Có lỗi xảy ra");
       }
-    } catch (error) {
-      console.error("Error fetching child categories:", error);
+    } catch (error: any) {
+      console.error("Error setting featured:", error);
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể cập nhật tin tức nổi bật",
+        variant: "destructive",
+        duration: 3000
+      });
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
-  };
-
-  const handleFormDataChange = (field: keyof EditFormData, value: string) => {
-    setEditFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const handleEdit = (id: number) => {
-    setSelectedNewsId(id);
-    setIsEditModalOpen(true);
-  };
-
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false);
-    setSelectedNewsId(null);
-    setSubmitting(false);
-    setEditFormData({
-      header: "",
-      title: "",
-      content: "",
-      footer: "",
-      timeReading: "",
-      links: "",
-      selectedCategory: "",
-      selectedChildCategory: "",
-      imageUrl: ""
-    });
-    setImageFile(null);
-    setImagePreview(null);
-  };
-
-  const validateForm = (): boolean => {
-    const { header, title, content, footer, timeReading, selectedCategory, selectedChildCategory } = editFormData;
-
-    if (!header.trim()) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng nhập tiêu đề bài viết",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    if (!title.trim()) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng nhập mô tả ngắn",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    if (!content.trim()) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng nhập nội dung bài viết",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    if (!footer.trim()) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng nhập kết luận",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    if (!timeReading || parseInt(timeReading) <= 0) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng nhập thời gian đọc hợp lệ",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    if (!selectedCategory) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng chọn danh mục",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    if (!selectedChildCategory) {
-      toast({
-        title: "Thiếu thông tin",
-        description: "Vui lòng chọn danh mục con",
-        variant: "destructive",
-        duration: 3000
-      });
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedNewsId) return;
-
-    if (!validateForm()) {
-      return;
-    }
-
-    setSubmitting(true);
+  const handleDelete = async () => {
+    if (!selectedNews) return;
 
     try {
-      let finalImageUrl = editFormData.imageUrl;
-
-      // Upload new image if selected
-      if (imageFile) {
-        const imageFormData = new FormData();
-        imageFormData.append("image", imageFile);
-
-        const uploadRes = await fetch("/api/upload", {
+      setIsSubmitting(true);
+      const response = await fetch(
+        `http://localhost:5000/api/News/AdminDelele?id=${selectedNews.newsId}`,
+        {
           method: "POST",
-          body: imageFormData,
-        });
-
-        if (uploadRes.ok) {
-          const uploadResult = await uploadRes.json();
-          if (uploadResult.success && uploadResult.filePath) {
-            finalImageUrl = uploadResult.filePath;
-          }
-        } else {
-          toast({
-            title: "Cảnh báo",
-            description: "Không thể tải ảnh lên, sử dụng ảnh hiện tại",
-            duration: 3000
-          });
+          headers: {
+            "Authorization": `Bearer ${adminToken}`,
+          },
         }
+      );
+
+      if (response.ok) {
+        setNewsList(prev => prev.filter(news => news.newsId !== selectedNews.newsId));
+        setShowDeleteModal(false);
+        setSelectedNews(null);
+        
+        toast({
+          title: "Thành công",
+          description: "Xóa tin tức thành công",
+          duration: 3000
+        });
+      } else {
+        throw new Error("Lỗi khi xóa tin tức");
       }
+    } catch (error: any) {
+      console.error("Error deleting news:", error);
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể xóa tin tức",
+        variant: "destructive",
+        duration: 3000
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      // Chuẩn bị form-data đúng tên trường backend
-      const formData = new FormData();
-      formData.append("NewsId", selectedNewsId!.toString());
-      formData.append("Header", editFormData.header);
-      formData.append("Title", editFormData.title);
-      formData.append("Content", editFormData.content);
-      formData.append("Footer", editFormData.footer);
-      formData.append("TimeReading", editFormData.timeReading);
-      formData.append("Links", editFormData.links || "");
-      formData.append("CategoryId", editFormData.selectedCategory);
-      formData.append("ChildrenCategoryId", editFormData.selectedChildCategory);
-      formData.append("ImagesLink", finalImageUrl || "");
+  const handleEdit = async () => {
+    try {
+      setIsSubmitting(true);
+      
+      // Tạo JSON object thay vì FormData
+      const updateData = {
+        newsId: editFormData.newsId,
+        header: editFormData.header,
+        title: editFormData.title,
+        content: editFormData.content,
+        footer: editFormData.footer,
+        timeReading: editFormData.timeReading,
+        links: selectedNews?.links || ""
+      };
 
-      // Nếu có các trường UserName, avatar, UserId, CreatedDate thì append nếu có dữ liệu
-      // Ví dụ:
-      // formData.append("UserName", userName);
-      // formData.append("avatar", avatarUrl);
-      // formData.append("UserId", userId.toString());
-      // formData.append("CreatedDate", createdDateString);
+      console.log("Sending edit data:", updateData);
 
-      const response = await fetch(`http://localhost:5000/api/News/UpdateNews`, {
+      const response = await fetch("http://localhost:5000/api/News/UpdateNews", {
         method: "PUT",
         headers: {
-          "Authorization": `Bearer ${valueToken}`
-          // KHÔNG set Content-Type khi dùng FormData, browser sẽ tự set boundary
+          "Authorization": `Bearer ${adminToken}`,
+          "Content-Type": "application/json", // Đổi sang JSON
         },
-        body: formData
+        body: JSON.stringify(updateData), // Gửi JSON thay vì FormData
       });
 
       console.log("Update response status:", response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Update error response:", errorText);
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        console.error("Update response error:", errorText);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      console.log("Update result:", result);
-
-        if (result.statusCode === 1) {
-           toast({
-              title: "Thành công",
-              description: "Cập nhật bài viết thành công",
-               duration: 3000
-            });
-          handleCloseEditModal();
-
-             fetchNews().catch(console.error);
-        } else {
-               throw new Error(result.message || "Lỗi không xác định");
-        }
-    } catch (error: any) {
-      console.error("Error updating news:", error);
-      toast({
-        title: "Lỗi cập nhật",
-        description: error.message || "Có lỗi xảy ra khi cập nhật bài viết",
-        variant: "destructive",
-        duration: 3000
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    if (!confirm("Bạn có chắc muốn xóa bài viết này?")) return;
-    try {
-      const response = await fetch(`http://localhost:5000/api/News/AdminDelele?id=${id}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${valueToken}`,
-        },
-      });
-      if (!response.ok) {
-        throw new Error("Lỗi khi xóa bài viết");
-      }
-      setArticles(articles.filter((article) => article.id !== id));
-      toast({
-        title: "Thành công",
-        description: "Bài viết đã được xóa",
-        duration: 3000
-      });
-    } catch (err: any) {
-      setError(err.message);
-      toast({
-        title: "Lỗi",
-        description: err.message,
-        variant: "destructive",
-        duration: 3000
-      });
-    }
-  };
-
-  const handleToggleFeatured = async (newsId: number) => {
-    const isFeatured = featuredNewsIds.includes(newsId);
-
-    try {
-      const response = await fetch(
-        `http://localhost:5000/api/News/SetFeaturedNews?newsId=${newsId}&isFeatured=${!isFeatured}`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${valueToken}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-
+      console.log("Update response data:", result);
+      
       if (result.statusCode === 1) {
+        // Update local state với các field đã chỉnh sửa
+        setNewsList(prev => prev.map(news => 
+          news.newsId === editFormData.newsId 
+            ? { 
+                ...news, 
+                header: editFormData.header,
+                title: editFormData.title,
+                content: editFormData.content,
+                footer: editFormData.footer,
+                timeReading: editFormData.timeReading,
+                modifiedDate: new Date().toISOString() 
+              }
+            : news
+        ));
+        
+        setShowEditModal(false);
+        setSelectedNews(null);
+        
         toast({
           title: "Thành công",
-          description: isFeatured ? "Đã bỏ chọn bài viết nổi bật" : "Đã chọn bài viết nổi bật",
+          description: "Cập nhật tin tức thành công",
           duration: 3000
         });
-
-        if (isFeatured) {
-          setFeaturedNewsIds(prev => prev.filter(id => id !== newsId));
-        } else {
-          setFeaturedNewsIds(prev => [...prev, newsId]);
-        }
       } else {
-        toast({
-          title: "Lỗi",
-          description: result.data || "Không thể cập nhật bài viết nổi bật",
-          variant: "destructive",
-          duration: 3000
-        });
+        throw new Error(result.message || "API trả về lỗi");
       }
-    } catch (error) {
-      console.error("Error toggling featured:", error);
+    } catch (error: any) {
+      console.error("Error updating news:", error);
+      
+      // Hiển thị lỗi chi tiết hơn
+      let errorMessage = "Không thể cập nhật tin tức";
+      if (error.message.includes("415")) {
+        errorMessage = "Backend không hỗ trợ định dạng dữ liệu này";
+      } else if (error.message.includes("HTTP error")) {
+        errorMessage = "Lỗi kết nối với server";
+      } else if (error.message.includes("API")) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Lỗi",
-        description: "Có lỗi xảy ra khi cập nhật",
+        title: "Lỗi cập nhật",
+        description: errorMessage,
         variant: "destructive",
-        duration: 3000
+        duration: 5000
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSelectChange = (id: number, checked: boolean) => {
-    if (checked) {
-      setSelectedArticles((prev) => [...prev, id]);
-    } else {
-      setSelectedArticles((prev) => prev.filter((item) => item !== id));
-    }
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      const allIds = filteredArticles.map((article) => article.id);
-      setSelectedArticles(allIds);
-    } else {
-      setSelectedArticles([]);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedArticles.length === 0) {
-      setError("Vui lòng chọn ít nhất một bài viết để xóa.");
-      return;
-    }
-    if (!confirm("Bạn có chắc muốn xóa những bài viết đã chọn?")) return;
-
-    try {
-      await Promise.all(
-        selectedArticles.map((id) =>
-          fetch(`http://localhost:5000/api/News/AdminDelele?id=${id}`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${valueToken}`,
-            },
-          })
-        )
-      );
-      fetchNews();
-      setSuccess(`Đã xóa ${selectedArticles.length} bài viết thành công!`);
-      setSelectedArticles([]);
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const allSelected = filteredArticles.length > 0 && selectedArticles.length === filteredArticles.length;
-
+  // Helper functions
   const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString('vi-VN', {
       year: 'numeric',
       month: 'short',
@@ -670,29 +413,47 @@ export default function NewsPage() {
     });
   };
 
-  const getStatusBadge = (published: boolean) => {
-    if (published) {
-      return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-          <Check className="w-3 h-3 mr-1" />
-          Đã xuất bản
-        </span>
-      );
+  const getCategoryName = (categoryId: number) => {
+    return categories.find(cat => cat.id === categoryId)?.name || "Khác";
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
-      return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-          <Clock className="w-3 h-3 mr-1" />
-          Bản nháp
-        </span>
-      );
+      setSortField(field);
+      setSortDirection('asc');
     }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />;
+  };
+
+  const openEditModal = (news: NewsItem) => {
+    setSelectedNews(news);
+    setEditFormData({
+      newsId: news.newsId,
+      header: news.header,
+      title: news.title,
+      content: news.content,
+      footer: news.footer,
+      timeReading: news.timeReading
+    });
+    setShowEditModal(true);
+  };
+
+  const openDeleteModal = (news: NewsItem) => {
+    setSelectedNews(news);
+    setShowDeleteModal(true);
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-        <span className="ml-2 text-gray-600">Đang tải...</span>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+        <span className="ml-3 text-gray-600">Đang tải...</span>
       </div>
     );
   }
@@ -708,507 +469,481 @@ export default function NewsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Bảo trì tin tức</h1>
-              <p className="text-gray-600">Quản lý và kiểm duyệt bài viết</p>
+              <p className="text-gray-600">Quản lý, chỉnh sửa và đặt tin tức nổi bật</p>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-500">Tổng số / Nổi bật</p>
-            <p className="text-2xl font-bold text-emerald-600">
-              {articles.length} / {featuredNewsIds.length}
-            </p>
+            <p className="text-sm text-gray-500">Tổng số</p>
+            <p className="text-2xl font-bold text-emerald-600">{newsList.length}</p>
           </div>
         </div>
       </div>
 
-      {/* Messages */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <p className="text-red-600">{error}</p>
-        </div>
-      )}
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-2">
-          <Check className="w-5 h-5 text-green-600" />
-          <p className="text-green-600">{success}</p>
-        </div>
-      )}
+      {/* Featured News Section */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+          <Star className="mr-2 text-yellow-500" size={24} />
+          Tin tức nổi bật ({featuredNews.length}/2)
+        </h2>
+        
+        {featuredNews.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {featuredNews.map((news) => (
+              <div key={news.newsId} className="border rounded-lg p-4 bg-yellow-50 border-yellow-200">
+                <div className="flex items-start space-x-3">
+                  <img 
+                    src={news.imagesLink || "/placeholder/64/64"} 
+                    alt={news.title}
+                    className="w-16 h-16 object-cover rounded"
+                  />
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-900 line-clamp-2">{news.title}</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Thứ tự: {news.featuredOrder} • {getCategoryName(news.categoryId)}
+                    </p>
+                    <div className="flex items-center mt-2 space-x-2">
+                      <button
+                        onClick={() => handleSetFeatured(news.newsId, false)}
+                        className="text-sm text-red-600 hover:text-red-800 flex items-center"
+                      >
+                        <StarOff size={16} className="mr-1" />
+                        Bỏ nổi bật
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Star className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p>Chưa có tin tức nổi bật nào</p>
+          </div>
+        )}
+      </div>
 
-      {/* Filters and Actions */}
+      {/* Search and Filter */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-          <div className="flex flex-1 space-x-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm bài viết..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-            </div>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Input
+              type="text"
+              placeholder="Tìm kiếm tin tức..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+            />
+          </div>
+          
+          <div className="flex gap-2">
             <div className="flex items-center space-x-2">
               <Filter className="w-4 h-4 text-gray-400" />
               <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as FilterType)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
               >
-                <option value="all">Tất cả</option>
-                <option value="published">Đã xuất bản</option>
-                <option value="draft">Bản nháp</option>
+                <option value="all">Tất cả danh mục</option>
+                {categories.map(category => (
+                  <option key={category.id} value={category.id.toString()}>
+                    {category.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
-
-          <div className="flex space-x-3">
-            <button
-              onClick={handleBulkDelete}
-              disabled={selectedArticles.length === 0}
-              className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Xóa đã chọn ({selectedArticles.length})
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Articles Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredArticles.map((article) => {
-          const isFeatured = featuredNewsIds.includes(article.newsId);
-
-          return (
-            <div key={article.id} className="border border-gray-200 hover:border-emerald-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-all duration-300 h-full flex flex-col">
-              <div className="relative w-full h-[160px] overflow-hidden">
-                <img
-                  src={article.imagesLink || "/placeholder/400/250.jpg"}
-                  alt={article.header || article.title}
-                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-700 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-                  <Eye size={12} />
-                  1.2k
-                </div>
-
-                {isFeatured && (
-                  <div className="absolute top-3 left-3 bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-                    <Star size={12} className="fill-current" />
-                    Nổi bật
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 flex-1 flex flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-emerald-600 font-medium">#{article.id}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleFeatured(article.newsId);
-                      }}
-                      className={`p-1.5 rounded-full transition-colors ${isFeatured
-                          ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+      {/* News Table */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Danh sách tin tức ({filteredNews.length})
+          </h2>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left">
+                  <button
+                    onClick={() => handleSort('newsId')}
+                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
+                  >
+                    <span>ID</span>
+                    {getSortIcon('newsId')}
+                  </button>
+                </th>
+                <th className="px-6 py-4 text-left">Nội dung</th>
+                <th className="px-6 py-4 text-left">
+                  <button
+                    onClick={() => handleSort('userName')}
+                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
+                  >
+                    <span>Tác giả</span>
+                    {getSortIcon('userName')}
+                  </button>
+                </th>
+                <th className="px-6 py-4 text-left">
+                  <button
+                    onClick={() => handleSort('categoryId')}
+                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
+                  >
+                    <span>Danh mục</span>
+                    {getSortIcon('categoryId')}
+                  </button>
+                </th>
+                <th className="px-6 py-4 text-left">
+                  <button
+                    onClick={() => handleSort('createdDate')}
+                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
+                  >
+                    <span>Ngày tạo</span>
+                    {getSortIcon('createdDate')}
+                  </button>
+                </th>
+                <th className="px-6 py-4 text-left">Hành động</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredNews.map((news) => (
+                <tr key={news.newsId} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <span className="text-sm font-medium text-gray-900">#{news.newsId}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-start space-x-3">
+                      <img 
+                        src={news.imagesLink || "/placeholder/64/64"} 
+                        alt={news.title}
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">
+                          {news.header || news.title}
+                        </h3>
+                        <p className="text-xs text-gray-500 line-clamp-2">{news.content}</p>
+                        <div className="flex items-center mt-1 text-xs text-gray-500">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {news.timeReading} phút đọc
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">{news.userName}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <Badge variant="outline" className="text-xs">
+                      {getCategoryName(news.categoryId)}
+                    </Badge>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Calendar className="w-4 h-4 mr-1" />
+                      {formatDate(news.createdDate)}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => openEditModal(news)}
+                        className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200"
+                      >
+                        <Edit3 size={12} className="mr-1" />
+                        Sửa
+                      </button>
+                      
+                      <button
+                        onClick={() => handleSetFeatured(news.newsId, !news.isFeatured)}
+                        disabled={!news.isFeatured && featuredNews.length >= 2}
+                        className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-md border ${
+                          news.isFeatured
+                            ? 'text-yellow-700 bg-yellow-50 hover:bg-yellow-100 border-yellow-200'
+                            : featuredNews.length >= 2
+                            ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                            : 'text-yellow-700 bg-white hover:bg-yellow-50 border-yellow-200'
                         }`}
-                      title={isFeatured ? "Bỏ chọn nổi bật" : "Chọn làm nổi bật"}
-                    >
-                      {isFeatured ? (
-                        <Star size={16} className="fill-current" />
-                      ) : (
-                        <StarOff size={16} />
-                      )}
-                    </button>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="p-1 hover:bg-gray-100 rounded">
-                          <MoreVertical className="w-4 h-4 text-gray-600" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => handleEdit(article.newsId)}
-                          className="flex items-center space-x-2 cursor-pointer"
-                        >
-                          <Edit className="w-4 h-4" />
-                          <span>Chỉnh sửa</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="flex items-center space-x-2 cursor-pointer">
-                          <Eye className="w-4 h-4" />
-                          <span>Xem chi tiết</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(article.id)}
-                          className="flex items-center space-x-2 text-red-600 focus:text-red-600 cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Xóa bài viết</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
-                <h3 className="text-lg font-semibold mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
-                  {article.title}
-                </h3>
-
-                {article.excerpt && (
-                  <p className="text-sm text-gray-600 line-clamp-3 mb-3 flex-1">
-                    {article.excerpt}
-                  </p>
-                )}
-
-                <div className="space-y-2 mt-auto pt-3 border-t border-gray-100">
-                  <div className="flex items-center text-xs text-gray-500">
-                    <User className="h-3.5 w-3.5 mr-1" />
-                    <span>{article.author || 'Unknown'}</span>
-                    <span className="mx-2">•</span>
-                    <Calendar className="h-3.5 w-3.5 mr-1" />
-                    <span>{formatDate(article.createdAt || "")}</span>
-                  </div>
-
-                  {article.category && (
-                    <div className="flex items-center text-xs text-gray-500">
-                      <span className="px-2 py-1 bg-gray-100 rounded-full">
-                        {article.category}
-                      </span>
+                      >
+                        {news.isFeatured ? <StarOff size={12} className="mr-1" /> : <Star size={12} className="mr-1" />}
+                        {news.isFeatured ? 'Bỏ nổi bật' : 'Đặt nổi bật'}
+                      </button>
+                      
+                      <button
+                        onClick={() => openDeleteModal(news)}
+                        className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
+                      >
+                        <Trash2 size={12} className="mr-1" />
+                        Xóa
+                      </button>
                     </div>
-                  )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {filteredNews.length === 0 && (
+          <div className="p-12 text-center">
+            <div className="text-gray-400 mb-4">
+              <Search size={48} className="mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Không tìm thấy tin tức</h3>
+            <p className="text-gray-500">Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc</p>
+          </div>
+        )}
+      </div>
 
-                  {article.views !== undefined && (
-                    <div className="flex items-center text-xs text-gray-500">
-                      <TrendingUp className="h-3.5 w-3.5 mr-1" />
-                      <span>{article.views.toLocaleString()} lượt xem</span>
-                    </div>
-                  )}
+      {/* Delete Modal */}
+      {showDeleteModal && selectedNews && (
+        <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <AlertTriangle className="text-red-500 mr-3" size={24} />
+                Xác nhận xóa
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-gray-600 mb-4">
+                Bạn có chắc chắn muốn xóa tin tức "{selectedNews.title}"? 
+                Hành động này không thể hoàn tác.
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="flex items-start space-x-2">
+                  <img 
+                    src={selectedNews.imagesLink || "/placeholder/48/48"} 
+                    alt={selectedNews.title}
+                    className="w-12 h-12 object-cover rounded"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-red-900">{selectedNews.header}</p>
+                    <p className="text-xs text-red-700">ID: #{selectedNews.newsId}</p>
+                  </div>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Empty state */}
-      {filteredArticles.length === 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
-          <div className="text-center">
-            <div className="p-3 bg-gray-100 rounded-full w-16 h-16 mx-auto mb-4">
-              <FileText className="w-10 h-10 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Không có bài viết</h3>
-            <p className="text-gray-500">
-              {searchTerm || filterType !== 'all'
-                ? "Không tìm thấy bài viết phù hợp với bộ lọc hiện tại"
-                : "Chưa có bài viết nào trong hệ thống"}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Select All Checkbox (Bottom) */}
-      {filteredArticles.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(e) => handleSelectAll(e.target.checked)}
-                className="w-4 h-4 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500"
-              />
-              <span className="text-sm text-gray-700">
-                Chọn tất cả ({filteredArticles.length} bài viết)
-              </span>
-            </label>
-
-            <div className="text-sm text-gray-500">
-              Đã chọn {selectedArticles.length} / {filteredArticles.length} bài viết
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Tổng bài viết</p>
-              <p className="text-2xl font-bold text-emerald-600">{articles.length}</p>
-            </div>
-            <div className="p-3 bg-emerald-100 rounded-lg">
-              <FileText className="w-6 h-6 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Đã xuất bản</p>
-              <p className="text-2xl font-bold text-green-600">
-                {articles.filter(a => a.published).length}
-              </p>
-            </div>
-            <div className="p-3 bg-green-100 rounded-lg">
-              <Check className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Bản nháp</p>
-              <p className="text-2xl font-bold text-gray-600">
-                {articles.filter(a => !a.published).length}
-              </p>
-            </div>
-            <div className="p-3 bg-gray-100 rounded-lg">
-              <Clock className="w-6 h-6 text-gray-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Results Summary */}
-      {filteredArticles.length > 0 && (
-        <div className="text-center text-sm text-gray-500">
-          Hiển thị {filteredArticles.length} / {articles.length} bài viết
-        </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isSubmitting}
+              >
+                Hủy
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Đang xóa..." : "Xóa"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Edit Modal */}
-      <Dialog open={isEditModalOpen} onOpenChange={(open) => {
-        if (!open) {
-          handleCloseEditModal();
-        }
-      }}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden p-0" aria-describedby={undefined}>
-          <DialogHeader className="p-6 border-b">
-            <DialogTitle className="text-xl font-semibold flex items-center">
-              <Edit className="w-5 h-5 mr-2 text-emerald-600" />
-              Chỉnh sửa bài viết #{selectedNewsId}
-            </DialogTitle>
-          </DialogHeader>
-
-          {editLoading ? (
-            <div className="flex justify-center items-center p-12">
-              <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-              <span className="ml-2 text-gray-600">Đang tải thông tin bài viết...</span>
-            </div>
-          ) : (
-            <ScrollArea className="max-h-[calc(90vh-10rem)]">
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Left column */}
-                  <div className="space-y-6">
-                    {/* Header */}
-                    <div className="space-y-2">
-                      <Label htmlFor="header" className="font-medium">
-                        Tiêu đề bài viết <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="header"
-                        value={editFormData.header}
-                        onChange={(e) => handleFormDataChange('header', e.target.value)}
-                        placeholder="Nhập tiêu đề bài viết"
-                        className="w-full"
-                      />
-                    </div>
-
-                    {/* Title (description) */}
-                    <div className="space-y-2">
-                      <Label htmlFor="title" className="font-medium">
-                        Mô tả ngắn <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="title"
-                        value={editFormData.title}
-                        onChange={(e) => handleFormDataChange('title', e.target.value)}
-                        placeholder="Nhập mô tả ngắn"
-                        className="w-full"
-                      />
-                    </div>
-
-                    {/* Content */}
-                    <div className="space-y-2">
-                      <Label htmlFor="content" className="font-medium">
-                        Nội dung <span className="text-red-500">*</span>
-                      </Label>
-                      <textarea
-                        id="content"
-                        value={editFormData.content}
-                        onChange={(e) => handleFormDataChange('content', e.target.value)}
-                        placeholder="Nhập nội dung bài viết"
-                        className="w-full h-40 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
-
-                    {/* Footer */}
-                    <div className="space-y-2">
-                      <Label htmlFor="footer" className="font-medium">
-                        Kết luận <span className="text-red-500">*</span>
-                      </Label>
-                      <textarea
-                        id="footer"
-                        value={editFormData.footer}
-                        onChange={(e) => handleFormDataChange('footer', e.target.value)}
-                        placeholder="Nhập kết luận"
-                        className="w-full h-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
+      {showEditModal && selectedNews && (
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Edit3 className="text-emerald-600 mr-3" size={24} />
+                Chỉnh sửa tin tức
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              {/* Thông tin không thể sửa - Hiển thị read-only */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <h3 className="text-sm font-medium text-gray-700 mb-3">Thông tin cố định (không thể sửa)</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">ID</label>
+                    <div className="text-sm text-gray-900 font-mono">#{selectedNews.newsId}</div>
                   </div>
-
-                  {/* Right column */}
-                  <div className="space-y-6">
-                    {/* Image Preview & Upload */}
-                    <div className="space-y-2">
-                      <Label htmlFor="image" className="font-medium">
-                        Ảnh bìa
-                      </Label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-emerald-500 transition-all relative">
-                        {imagePreview ? (
-                          <div className="space-y-3">
-                            <img
-                              src={imagePreview}
-                              alt="Preview"
-                              className="max-h-40 mx-auto object-cover rounded-lg"
-                            />
-                            <p className="text-sm text-emerald-600">Nhấp để thay đổi ảnh</p>
-                          </div>
-                        ) : (
-                          <div className="py-4">
-                            <p className="text-gray-500">Nhấp để tải ảnh lên</p>
-                            <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (tối đa 2MB)</p>
-                          </div>
-                        )}
-                        <input
-                          id="image"
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageChange}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Metadata fields */}
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Time Reading */}
-                      <div className="space-y-2">
-                        <Label htmlFor="timeReading" className="font-medium">
-                          Thời gian đọc (phút) <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          id="timeReading"
-                          type="number"
-                          min="1"
-                          value={editFormData.timeReading}
-                          onChange={(e) => handleFormDataChange('timeReading', e.target.value)}
-                          placeholder="Nhập thời gian đọc"
-                        />
-                      </div>
-
-                      {/* Links */}
-                      <div className="space-y-2">
-                        <Label htmlFor="links" className="font-medium">
-                          Liên kết
-                        </Label>
-                        <Input
-                          id="links"
-                          value={editFormData.links}
-                          onChange={(e) => handleFormDataChange('links', e.target.value)}
-                          placeholder="Nhập liên kết"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Categories */}
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Parent Category */}
-                      <div className="space-y-2">
-                        <Label htmlFor="category" className="font-medium">
-                          Danh mục <span className="text-red-500">*</span>
-                        </Label>
-                        <select
-                          id="category"
-                          value={editFormData.selectedCategory}
-                          onChange={(e) => handleFormDataChange('selectedCategory', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        >
-                          <option value="">Chọn danh mục</option>
-                          {categories.map((category) => (
-                            <option key={category.categoryId} value={category.categoryId}>
-                              {category.categoryName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Child Category */}
-                      <div className="space-y-2">
-                        <Label htmlFor="childCategory" className="font-medium">
-                          Danh mục con <span className="text-red-500">*</span>
-                        </Label>
-                        <select
-                          id="childCategory"
-                          value={editFormData.selectedChildCategory}
-                          onChange={(e) => handleFormDataChange('selectedChildCategory', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          disabled={!editFormData.selectedCategory}
-                        >
-                          <option value="">Chọn danh mục con</option>
-                          {childCategories.map((category) => (
-                            <option key={category.childrenCategoryID} value={category.childrenCategoryID}>
-                              {category.childrenCategoryName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Danh mục</label>
+                    <Badge variant="outline" className="text-xs">
+                      {getCategoryName(selectedNews.categoryId)}
+                    </Badge>
                   </div>
                 </div>
-
-                <DialogFooter className="flex justify-end gap-3 mt-8 pt-4 border-t">
+                
+                <div className="flex items-center space-x-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Tác giả</label>
+                    <div className="flex items-center space-x-2">
+                      <img 
+                        src={selectedNews.avatar || "/placeholder/24/24"} 
+                        alt={selectedNews.userName}
+                        className="w-6 h-6 rounded-full"
+                      />
+                      <span className="text-sm text-gray-900">{selectedNews.userName}</span>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Hình ảnh</label>
+                    <img 
+                      src={selectedNews.imagesLink || "/placeholder/48/48"} 
+                      alt="Ảnh bài viết"
+                      className="w-12 h-12 object-cover rounded border"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Ngày tạo</label>
+                    <div className="text-sm text-gray-900">{formatDate(selectedNews.createdDate)}</div>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Liên kết gốc</label>
+                  <div className="text-sm text-gray-900 bg-white px-3 py-2 rounded border">
+                    {selectedNews.links || "Không có"}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Phần có thể chỉnh sửa */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-emerald-700 mb-3 flex items-center">
+                  <Edit3 size={16} className="mr-2" />
+                  Nội dung có thể chỉnh sửa
+                </h3>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tiêu đề phụ <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={editFormData.header}
+                    onChange={(e) => setEditFormData(prev => ({...prev, header: e.target.value}))}
+                    className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                    placeholder="Nhập tiêu đề phụ..."
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tiêu đề chính <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    value={editFormData.title}
+                    onChange={(e) => setEditFormData(prev => ({...prev, title: e.target.value}))}
+                    className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                    placeholder="Nhập tiêu đề chính..."
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nội dung bài viết <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={editFormData.content}
+                    onChange={(e) => setEditFormData(prev => ({...prev, content: e.target.value}))}
+                    rows={8}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Nhập nội dung bài viết..."
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ký tự: {editFormData.content.length}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Kết luận <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={editFormData.footer}
+                    onChange={(e) => setEditFormData(prev => ({...prev, footer: e.target.value}))}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    placeholder="Nhập kết luận bài viết..."
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ký tự: {editFormData.footer.length}
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Thời gian đọc (phút) <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="999"
+                    value={editFormData.timeReading}
+                    onChange={(e) => setEditFormData(prev => ({...prev, timeReading: parseInt(e.target.value) || 1}))}
+                    className="w-32 border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Thời gian ước tính để đọc hết bài viết
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter className="bg-gray-50 rounded-lg p-4 mt-6">
+              <div className="flex items-center justify-between w-full">
+                <p className="text-xs text-gray-500">
+                  Có thể chỉnh sửa: tiêu đề, nội dung, kết luận và thời gian đọc
+                </p>
+                <div className="flex space-x-3">
                   <Button
-                    type="button"
                     variant="outline"
-                    onClick={handleCloseEditModal}
-                    disabled={submitting}
+                    onClick={() => setShowEditModal(false)}
+                    disabled={isSubmitting}
                   >
-                    <X className="w-4 h-4 mr-2" />
                     Hủy
                   </Button>
                   <Button
-                    type="button"
+                    onClick={handleEdit}
+                    disabled={isSubmitting || !editFormData.header.trim() || !editFormData.title.trim() || !editFormData.content.trim() || !editFormData.footer.trim()}
                     className="bg-emerald-600 hover:bg-emerald-700"
-                    disabled={submitting}
-                    onClick={() => handleSubmit()}
                   >
-                    {submitting ? (
+                    {isSubmitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Đang cập nhật...
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Đang lưu...
                       </>
                     ) : (
                       <>
-                        <Save className="w-4 h-4 mr-2" />
+                        <Save size={16} className="mr-2" />
                         Lưu thay đổi
                       </>
                     )}
                   </Button>
-                </DialogFooter>
+                </div>
               </div>
-            </ScrollArea>
-          )}
-        </DialogContent>
-      </Dialog>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Results Summary */}
+      {filteredNews.length > 0 && (
+        <div className="text-center text-sm text-gray-500">
+          Hiển thị {filteredNews.length} / {newsList.length} tin tức
+        </div>
+      )}
     </div>
   );
 }

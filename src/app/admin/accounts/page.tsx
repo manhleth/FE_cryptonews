@@ -4,46 +4,25 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import {
-  Users,
-  Edit3,
-  Trash2,
-  Save,
-  X,
-  UserCheck,
-  UserX,
-  Search,
-  Filter,
-  ChevronUp,
-  ChevronDown,
-  User,
-  Mail,
-  Phone,
-  Calendar,
-  Shield,
-  MoreVertical
+  Users, Edit3, Trash2, Save, X, Search, Filter, ChevronUp, ChevronDown,
+  User, Mail, Phone, Calendar, Shield, MoreVertical
 } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Định nghĩa kiểu dữ liệu người dùng theo API
 type User = {
   id: number;
   username: string;
   email: string;
-  password: string;
   fullname: string;
   phonenumber: string;
-  birthday: string; // YYYY-MM-DD
+  birthday: string;
   avatar: string;
-  role: string; // "admin" hoặc "user"
+  role: string;
 };
 
 type SortField = 'id' | 'fullname' | 'email' | 'role';
-type SortDirection = 'asc' | 'desc';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -51,53 +30,17 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newRole, setNewRole] = useState<string>("user");
   const [error, setError] = useState("");
-  const { toast } = useToast();
-  const { token } = useAuth();
-
-  // Search and filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>('id');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-
-  // Lấy danh sách người dùng từ API khi component mount
-
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  const { toast } = useToast();
+  const { token } = useAuth();
   const valueToken = localStorage.getItem("tokenAdmin");
-  useEffect(() => {
-    fetchUsers();
-  }, [valueToken]);
-  // Filter and search effect
-  useEffect(() => {
-    let filtered = users.filter(user => {
-      const matchesSearch =
-        user.fullname.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.username.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesRole = roleFilter === "all" || user.role === roleFilter;
-
-      return matchesSearch && matchesRole;
-    });
-
-    // Sort
-    filtered.sort((a, b) => {
-      const aValue = a[sortField];
-      const bValue = b[sortField];
-
-      if (sortDirection === 'asc') {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-      } else {
-        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-      }
-    });
-
-    setFilteredUsers(filtered);
-  }, [users, searchTerm, roleFilter, sortField, sortDirection]);
-
-  // Hàm gọi API GET để lấy danh sách user
+  // Fetch users
   const fetchUsers = async () => {
-    const valueToken = localStorage.getItem("tokenAdmin");
-    console.log("Token trong accounts: " + valueToken);
     try {
       const response = await fetch("http://localhost:5000/api/User/GetAllUserByAdmin", {
         headers: {
@@ -105,111 +48,81 @@ export default function UsersPage() {
           Authorization: `Bearer ${valueToken}`,
         },
       });
-      if (!response.ok) {
-        throw new Error("Lỗi khi lấy danh sách người dùng");
-      }
+      
+      if (!response.ok) throw new Error("Lỗi khi lấy danh sách người dùng");
+      
       const result = await response.json();
-      if (result.statusCode !== 1 || !result.data) {
-        throw new Error("Lỗi dữ liệu từ API");
-      }
-      // Ánh xạ dữ liệu từ API sang kiểu FE, xử lý giá trị null
+      if (result.statusCode !== 1 || !result.data) throw new Error("Lỗi dữ liệu từ API");
+      
       const mappedUsers: User[] = result.data.map((u: any) => ({
         id: u.userId,
         username: u.username || "",
         email: u.email || "",
-        password: u.password || "",
         fullname: u.fullname || "",
         phonenumber: u.phonenumber || "",
         birthday: u.birthday ? u.birthday.split("T")[0] : "",
         avatar: u.avatar || "",
         role: u.roleId === 1 ? "admin" : "user",
       }));
+      
       setUsers(mappedUsers);
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  // Hàm xóa user qua API DELETE (sử dụng query parameter userID)
+  // Delete user
   const handleDelete = async (id: number) => {
     if (!confirm("Bạn có chắc muốn xóa tài khoản này?")) return;
+    
     try {
       const response = await fetch(`http://localhost:5000/api/User/DeleUserByAdmin?userID=${id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${valueToken}` },
       });
-      if (!response.ok) {
-        throw new Error("Lỗi khi xóa người dùng");
-      }
-      // Cập nhật lại danh sách sau khi xóa thành công
+      
+      if (!response.ok) throw new Error("Lỗi khi xóa người dùng");
+      
       setUsers(users.filter((user) => user.id !== id));
-      toast({
-        title: "Success",
-        description: "User deleted successfully",
-        duration: 3000
-      });
+      toast({ title: "Success", description: "User deleted successfully", duration: 3000 });
     } catch (err: any) {
       setError(err.message);
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-        duration: 3000
-      });
+      toast({ title: "Error", description: err.message, variant: "destructive", duration: 3000 });
     }
   };
 
-  // Hàm cập nhật vai trò người dùng qua API sử dụng endpoint SetAdminRole hoặc SetUserRole
+  // Update role
   const handleUpdateRole = async () => {
     if (!editingUser) return;
 
     const roleChange = newRole === "admin" ? 1 : 0;
-    const url = `http://localhost:5000/api/User/SetAdminRole?UserID=${editingUser.id}&RoleChange=${roleChange}`
+    const url = `http://localhost:5000/api/User/SetAdminRole?UserID=${editingUser.id}&RoleChange=${roleChange}`;
 
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${valueToken}`,
         },
-        body: JSON.stringify({ UserID: editingUser.id }),
       });
+
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
       const result = await response.json();
-      console.log("✅ API Response:", result);
-      toast({
-        title: "Success",
-        description: "Role updated successfully",
-        duration: 3000
-      });
+      if (result.statusCode !== 1) throw new Error(result.data || "Cập nhật vai trò không thành công");
 
-      if (!response.ok || result.statusCode !== 1) {
-        throw new Error(result.message || "Cập nhật vai trò không thành công");
-      }
-
-      // Làm mới danh sách người dùng và thoát khỏi chế độ chỉnh sửa
-      fetchUsers();
+      toast({ title: "Success", description: "Role updated successfully", duration: 3000 });
+      await fetchUsers();
       setEditingUser(null);
+      setError("");
     } catch (err: any) {
       setError(err.message);
-      console.error("❌ Lỗi khi cập nhật vai trò:", err);
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-        duration: 3000
-      });
+      toast({ title: "Error", description: err.message, variant: "destructive", duration: 3000 });
     }
   };
 
-  // Hàm hủy chỉnh sửa
-  const handleCancelEdit = () => {
-    setEditingUser(null);
-  };
-
+  // Handle sorting
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -224,16 +137,43 @@ export default function UsersPage() {
     return sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />;
   };
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A";
-    return new Date(dateString).toLocaleDateString('vi-VN');
-  };
+  // Effects
+  useEffect(() => { fetchUsers(); }, [valueToken]);
 
-  const getRoleBadgeClass = (role: string) => {
-    return role === 'admin'
-      ? 'bg-purple-100 text-purple-800 border-purple-200'
-      : 'bg-blue-100 text-blue-800 border-blue-200';
-  };
+  useEffect(() => {
+    let filtered = users.filter(user => {
+      const matchesSearch = [user.fullname, user.email, user.username]
+        .some(field => field.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesRole = roleFilter === "all" || user.role === roleFilter;
+      return matchesSearch && matchesRole;
+    });
+
+    filtered.sort((a, b) => {
+      const aValue = a[sortField];
+      const bValue = b[sortField];
+      const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    setFilteredUsers(filtered);
+  }, [users, searchTerm, roleFilter, sortField, sortDirection]);
+
+  // Helper functions
+  const formatDate = (dateString: string) => 
+    dateString ? new Date(dateString).toLocaleDateString('vi-VN') : "N/A";
+
+  const getRoleBadgeClass = (role: string) =>
+    role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-blue-100 text-blue-800 border-blue-200';
+
+  const SortableHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
+    <button
+      onClick={() => handleSort(field)}
+      className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
+    >
+      <span>{children}</span>
+      {getSortIcon(field)}
+    </button>
+  );
 
   return (
     <div className="space-y-6">
@@ -262,81 +202,45 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Filters and Search */}
+      {/* Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm theo tên, email, username..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              />
-            </div>
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm theo tên, email, username..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
           </div>
-          <div className="flex gap-2">
-            <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-gray-400" />
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                <option value="all">Tất cả vai trò</option>
-                <option value="admin">Admin</option>
-                <option value="user">User</option>
-              </select>
-            </div>
+          <div className="flex items-center space-x-2">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="all">Tất cả vai trò</option>
+              <option value="admin">Admin</option>
+              <option value="user">User</option>
+            </select>
           </div>
         </div>
       </div>
 
-      {/* Users Table */}
+      {/* Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-4 text-left">
-                  <button
-                    onClick={() => handleSort('id')}
-                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
-                  >
-                    <span>ID</span>
-                    {getSortIcon('id')}
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-left">
-                  <button
-                    onClick={() => handleSort('fullname')}
-                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
-                  >
-                    <span>Thông tin cá nhân</span>
-                    {getSortIcon('fullname')}
-                  </button>
-                </th>
-                <th className="px-6 py-4 text-left">
-                  <button
-                    onClick={() => handleSort('email')}
-                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
-                  >
-                    <span>Email</span>
-                    {getSortIcon('email')}
-                  </button>
-                </th>
+                <th className="px-6 py-4 text-left"><SortableHeader field="id">ID</SortableHeader></th>
+                <th className="px-6 py-4 text-left"><SortableHeader field="fullname">Thông tin cá nhân</SortableHeader></th>
+                <th className="px-6 py-4 text-left"><SortableHeader field="email">Email</SortableHeader></th>
                 <th className="px-6 py-4 text-left">Liên hệ</th>
-                <th className="px-6 py-4 text-left">
-                  <button
-                    onClick={() => handleSort('role')}
-                    className="flex items-center space-x-1 font-medium text-gray-900 hover:text-emerald-600"
-                  >
-                    <span>Vai trò</span>
-                    {getSortIcon('role')}
-                  </button>
-                </th>
+                <th className="px-6 py-4 text-left"><SortableHeader field="role">Vai trò</SortableHeader></th>
                 <th className="px-6 py-4 text-left">Hành động</th>
               </tr>
             </thead>
@@ -380,7 +284,7 @@ export default function UsersPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    {editingUser && editingUser.id === user.id ? (
+                    {editingUser?.id === user.id ? (
                       <select
                         value={newRole}
                         onChange={(e) => setNewRole(e.target.value)}
@@ -397,47 +301,39 @@ export default function UsersPage() {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    {editingUser && editingUser.id === user.id ? (
+                    {editingUser?.id === user.id ? (
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={handleUpdateRole}
-                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                          className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700"
                         >
-                          <Save className="w-3 h-3 mr-1" />
-                          Lưu
+                          <Save className="w-3 h-3 mr-1" />Lưu
                         </button>
                         <button
-                          onClick={handleCancelEdit}
-                          className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+                          onClick={() => setEditingUser(null)}
+                          className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                         >
-                          <X className="w-3 h-3 mr-1" />
-                          Hủy
+                          <X className="w-3 h-3 mr-1" />Hủy
                         </button>
                       </div>
                     ) : (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button className="inline-flex items-center justify-center w-8 h-8 text-gray-400 bg-transparent border border-transparent rounded-lg hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
+                          <button className="inline-flex items-center justify-center w-8 h-8 text-gray-400 bg-transparent border border-transparent rounded-lg hover:text-gray-500">
                             <MoreVertical className="w-4 h-4" />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuItem
-                            onClick={() => {
-                              setEditingUser(user);
-                              setNewRole(user.role);
-                            }}
-                            className="flex items-center space-x-2"
+                            onClick={() => { setEditingUser(user); setNewRole(user.role); }}
                           >
-                            <Edit3 className="w-4 h-4" />
-                            <span>Chỉnh sửa vai trò</span>
+                            <Edit3 className="w-4 h-4 mr-2" />Chỉnh sửa vai trò
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleDelete(user.id)}
-                            className="flex items-center space-x-2 text-red-600 focus:text-red-600"
+                            className="text-red-600 focus:text-red-600"
                           >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Xóa tài khoản</span>
+                            <Trash2 className="w-4 h-4 mr-2" />Xóa tài khoản
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -453,9 +349,7 @@ export default function UsersPage() {
                         <Users className="w-6 h-6 text-gray-400" />
                       </div>
                       <p className="text-gray-500">
-                        {searchTerm || roleFilter !== "all"
-                          ? "Không tìm thấy người dùng phù hợp"
-                          : "Chưa có người dùng nào"}
+                        {searchTerm || roleFilter !== "all" ? "Không tìm thấy người dùng phù hợp" : "Chưa có người dùng nào"}
                       </p>
                     </div>
                   </td>
