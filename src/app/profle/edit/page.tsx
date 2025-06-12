@@ -1,5 +1,4 @@
-"use client";
-
+"use client"
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -9,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { 
   ChevronLeft, 
   User, 
@@ -17,7 +17,11 @@ import {
   Calendar, 
   FileText,
   Camera,
-  Loader2
+  Loader2,
+  Shield,
+  Lock,
+  ArrowRight,
+  Eye
 } from "lucide-react";
 import Link from "next/link";
 
@@ -38,7 +42,6 @@ export default function EditProfilePage() {
   // Fetch user data
   useEffect(() => {
     if (!user) {
-      // Redirect if not logged in
       router.push("/User/Login");
       return;
     }
@@ -83,113 +86,98 @@ export default function EditProfilePage() {
       toast({
         title: "File quá lớn",
         description: "Kích thước file không được vượt quá 5MB",
-        variant: "destructive", 
+        variant: "destructive",
         duration: 3000
       });
       return;
     }
 
+    setIsUploading(true);
     setImageFile(file);
     
     try {
-      setIsUploading(true);
-      
-      // Upload file ngay lập tức
+      // Create FormData for file upload
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append("file", file);
       
-      console.log("Đang upload file:", file.name);
-      
-      const uploadRes = await fetch("/api/upload", {
+      const uploadResponse = await fetch("http://localhost:5000/api/File/Upload", {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
         body: formData,
       });
       
-      if (!uploadRes.ok) {
-        const errorText = await uploadRes.text();
-        console.error("Upload error:", errorText);
-        throw new Error(`Upload failed: ${uploadRes.status}`);
+      if (!uploadResponse.ok) {
+        throw new Error("Lỗi upload file");
       }
       
-      const uploadResult = await uploadRes.json();
-      console.log("Upload result:", uploadResult);
+      const uploadData = await uploadResponse.json();
+      console.log("Upload response:", uploadData);
       
-      if (uploadResult.success && uploadResult.filePath) {
-        // Cập nhật avatar state với đường dẫn mới
-        setAvatar(uploadResult.filePath);
+      if (uploadData.statusCode === 1 && uploadData.data) {
+        const uploadedImagePath = uploadData.data;
         
-        toast({
-          title: "Tải ảnh thành công",
-          description: "Ảnh đại diện đã được tải lên",
-          duration: 3000
+        // Cập nhật avatar ngay lập tức
+        const updateData = {
+          fullname: fullName,
+          phoneNumber: phoneNumber,
+          birthday: birthday ? new Date(birthday).toISOString() : null,
+          avatar: uploadedImagePath
+        };
+        
+        const updateResponse = await fetch("http://localhost:5000/api/User/UpdateUserInfor", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(updateData),
         });
-      } else {
-        throw new Error("Upload không thành công");
+        
+        if (!updateResponse.ok) {
+          throw new Error("Lỗi cập nhật thông tin");
+        }
+        
+        const updateResult = await updateResponse.json();
+        
+        if (updateResult.statusCode === 1) {
+          await refreshUser();
+          setAvatar(uploadedImagePath);
+          
+          toast({
+            title: "Cập nhật avatar thành công",
+            description: "Ảnh đại diện của bạn đã được thay đổi",
+            duration: 3000
+          });
+        }
       }
-      
-    } catch (error) {
-      console.error("Lỗi khi tải ảnh:", error);
+    } catch (error: any) {
+      console.error("Lỗi upload avatar:", error);
       toast({
-        title: "Lỗi tải ảnh",
-        description: "Không thể tải ảnh lên. Vui lòng thử lại.",
+        title: "Lỗi upload",
+        description: error.message || "Không thể upload avatar. Vui lòng thử lại.",
         variant: "destructive",
         duration: 3000
       });
-      
-      // Reset file input nếu upload thất bại
-      setImageFile(null);
     } finally {
       setIsUploading(false);
+      setImageFile(null);
     }
   };
 
-  // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  // Handle form submission for other fields
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!token) {
-      toast({
-        title: "Lỗi xác thực",
-        description: "Vui lòng đăng nhập lại",
-        variant: "destructive",
-        duration: 3000
-      });
-      return;
-    }
-    
     setIsLoading(true);
     
     try {
-      // Nếu có file ảnh mới chưa được upload, upload trước
-      let finalAvatarPath = avatar;
-      
-      if (imageFile && !avatar.startsWith('/placeholder/400/')) {
-        console.log("Đang upload ảnh mới...");
-        const formData = new FormData();
-        formData.append("image", imageFile);
-        
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-        
-        if (uploadRes.ok) {
-          const uploadResult = await uploadRes.json();
-          if (uploadResult.success && uploadResult.filePath) {
-            finalAvatarPath = uploadResult.filePath;
-            console.log("Ảnh đã được upload:", finalAvatarPath);
-          }
-        } else {
-          console.warn("Không thể upload ảnh, sử dụng ảnh hiện tại");
-        }
-      }
-      
-      // Chuẩn bị dữ liệu cập nhật
+      // Prepare update data
       const updateData = {
-        fullname: fullName || "",
-        phoneNumber: phoneNumber || "",
+        fullname: fullName,
+        phoneNumber: phoneNumber,
         birthday: birthday ? new Date(birthday).toISOString() : null,
-        avatar: finalAvatarPath || ""
+        avatar: avatar || ""
       };
       
       console.log("Dữ liệu gửi đi:", updateData);
@@ -203,8 +191,6 @@ export default function EditProfilePage() {
         body: JSON.stringify(updateData),
       });
       
-      console.log("Response status:", response.status);
-      
       if (!response.ok) {
         const errorText = await response.text();
         console.error("Response error:", errorText);
@@ -212,14 +198,9 @@ export default function EditProfilePage() {
       }
       
       const data = await response.json();
-      console.log("Response data:", data);
       
       if (data.statusCode === 1) {
-        // Cập nhật thành công
         await refreshUser();
-        
-        // Cập nhật state local với dữ liệu mới
-        setAvatar(finalAvatarPath);
         
         toast({
           title: "Cập nhật thành công",
@@ -227,10 +208,6 @@ export default function EditProfilePage() {
           duration: 3000
         });
         
-        // Reset imageFile sau khi thành công
-        setImageFile(null);
-        
-        // Điều hướng về trang edit (theo yêu cầu của bạn)
         router.push("/profle/edit");
       } else {
         throw new Error(data.message || "Lỗi không xác định");
@@ -257,7 +234,7 @@ export default function EditProfilePage() {
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-8">
       <div className="flex items-center mb-6">
         <Link 
           href="/" 
@@ -268,7 +245,7 @@ export default function EditProfilePage() {
         <h1 className="text-xl font-bold">Chỉnh sửa thông tin cá nhân</h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-8">
         {/* Avatar Section */}
         <div className="flex items-center justify-center">
           <div className="relative">
@@ -309,12 +286,15 @@ export default function EditProfilePage() {
           </div>
         </div>
 
-        {/* Thông tin cá nhân */}
-        <div className="bg-white rounded-lg shadow p-5">
-          <h3 className="font-medium mb-4">Thông tin cá nhân</h3>
-          <Separator className="mb-4" />
-          
-          <div className="space-y-4">
+        {/* Personal Information Card */}
+        <Card className="bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <User className="w-5 h-5 text-emerald-600" />
+              Thông tin cá nhân
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {/* Họ và tên */}
             <div className="space-y-1.5">
               <Label htmlFor="fullName" className="flex items-center gap-2 text-sm text-gray-600">
@@ -326,26 +306,25 @@ export default function EditProfilePage() {
                 placeholder="Nhập họ và tên"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
-                required
+                className="border-gray-300 focus:border-emerald-500"
+                disabled={isLoading}
               />
             </div>
-            
-            {/* Email - Disabled */}
+
+            {/* Email (readonly) */}
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="flex items-center gap-2 text-sm text-gray-600">
+              <Label className="flex items-center gap-2 text-sm text-gray-600">
                 <Mail className="w-4 h-4" />
                 Email
               </Label>
               <Input
-                id="email"
                 value={user.email}
                 disabled
-                className="bg-gray-100 text-gray-500 cursor-not-allowed"
+                className="bg-gray-50 text-gray-500 cursor-not-allowed"
               />
               <p className="text-xs text-gray-500">Email không thể thay đổi</p>
             </div>
-            
+
             {/* Số điện thoại */}
             <div className="space-y-1.5">
               <Label htmlFor="phoneNumber" className="flex items-center gap-2 text-sm text-gray-600">
@@ -357,10 +336,11 @@ export default function EditProfilePage() {
                 placeholder="Nhập số điện thoại"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
-                className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                className="border-gray-300 focus:border-emerald-500"
+                disabled={isLoading}
               />
             </div>
-            
+
             {/* Ngày sinh */}
             <div className="space-y-1.5">
               <Label htmlFor="birthday" className="flex items-center gap-2 text-sm text-gray-600">
@@ -372,38 +352,74 @@ export default function EditProfilePage() {
                 type="date"
                 value={birthday}
                 onChange={(e) => setBirthday(e.target.value)}
-                className="border-gray-300 focus:border-emerald-500 focus:ring-emerald-500"
+                className="border-gray-300 focus:border-emerald-500"
+                disabled={isLoading}
               />
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* Action Buttons */}
+        {/* Security Settings Card */}
+        <Card className="bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Shield className="w-5 h-5 text-emerald-600" />
+              Cài đặt bảo mật
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <Lock className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">Đổi mật khẩu</h3>
+                  <p className="text-sm text-gray-500">Cập nhật mật khẩu để bảo mật tài khoản</p>
+                </div>
+              </div>
+              <Link 
+                href="/User/ChangePassword"
+                className="flex items-center gap-2 px-4 py-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+              >
+                <span className="text-sm font-medium">Đổi mật khẩu</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+            
+            {/* Additional Security Options */}
+          </CardContent>
+        </Card>
+
+        {/* Submit Button */}
         <div className="flex gap-3">
           <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push("/profle")}
+            type="submit"
             disabled={isLoading}
-            className="flex-1"
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-12"
+            onClick={handleSubmit}
           >
-            Hủy
+            {isLoading ? (
+              <div className="flex items-center">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Đang cập nhật...
+              </div>
+            ) : (
+              "Lưu thông tin"
+            )}
           </Button>
           
           <Button
-            type="submit"
-            className="bg-emerald-600 hover:bg-emerald-700 flex-1"
-            disabled={isLoading || isUploading}
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            disabled={isLoading}
+            className="px-8 h-12"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Đang cập nhật...
-              </>
-            ) : "Lưu thay đổi"}
+            Hủy
           </Button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

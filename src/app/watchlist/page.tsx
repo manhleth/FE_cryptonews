@@ -1,5 +1,5 @@
 "use client";
-import { CryptoWatchlistManager } from '@/components/CryptoWatchlistManager.old';
+import { CryptoWatchlistManager } from '@/components/CryptoWatchlistManager';
 
 export default function WatchlistPage() {
   return (

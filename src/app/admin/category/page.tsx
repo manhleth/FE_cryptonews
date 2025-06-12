@@ -4,10 +4,7 @@ import { useEffect, useState } from "react";
 import { 
   FolderTree, 
   Plus, 
-  Edit3, 
   Trash2, 
-  Save, 
-  X, 
   Folder,
   FolderOpen,
   Search,
@@ -18,23 +15,19 @@ import {
 type Category = {
   id: number;
   categoryName: string;
-  description: string;
 };
 
 type ChildrenCategory = {
   id: number;
   name: string;
   parentCategoryId: number;
-  description: string;
 };
 
 export default function CategoriesPage() {
   // State cho danh mục cha
   const [categories, setCategories] = useState<Category[]>([]);
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<number[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryDescription, setNewCategoryDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
   // State cho danh mục con
@@ -43,7 +36,6 @@ export default function CategoriesPage() {
   const [newChildCategory, setNewChildCategory] = useState({
     name: "",
     parentCategoryId: 0,
-    description: "",
   });
   const [isCreatingChild, setIsCreatingChild] = useState(false);
 
@@ -53,6 +45,8 @@ export default function CategoriesPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  
+  // Using localStorage token - keep your original auth solution
   const valueToken = localStorage.getItem("tokenAdmin");
 
   // Lấy danh mục từ API khi component mount
@@ -71,7 +65,6 @@ export default function CategoriesPage() {
       const mappedCategories: Category[] = result.data.map((item: any) => ({
         id: item.categoryId,
         categoryName: item.categoryName || "",
-        description: item.description || "",
       }));
       setCategories(mappedCategories);
       setSelectedCategories([]);
@@ -97,7 +90,6 @@ export default function CategoriesPage() {
         id: item.childrenCategoryID,
         name: item.childrenCategoryName || "",
         parentCategoryId: item.parentCategoryId,
-        description: item.description || "",
       }));
       setChildrenCategories(mappedChildren);
       setSelectedChildCategories([]);
@@ -151,8 +143,7 @@ export default function CategoriesPage() {
           "Authorization": `Bearer ${valueToken}`,
         },
         body: JSON.stringify({ 
-          categoryName: newCategoryName,
-          description: newCategoryDescription 
+          categoryName: newCategoryName
         }),
       });
       const result = await response.json();
@@ -160,7 +151,6 @@ export default function CategoriesPage() {
         throw new Error(result.message || "Lỗi khi tạo danh mục");
       }
       setNewCategoryName("");
-      setNewCategoryDescription("");
       setSuccess("Danh mục đã được tạo thành công!");
       fetchCategories();
     } catch (err: any) {
@@ -210,28 +200,6 @@ export default function CategoriesPage() {
     }
   };
 
-  // Chỉnh sửa danh mục cha
-  const handleEditCategory = (category: Category) => {
-    setEditingCategory(category);
-  };
-
-  const handleUpdateCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCategory) return;
-    
-    try {
-      // Note: You'll need to implement the update API endpoint
-      // For now, we'll just update locally
-      setCategories(
-        categories.map((c) => (c.id === editingCategory.id ? editingCategory : c))
-      );
-      setEditingCategory(null);
-      setSuccess("Danh mục đã được cập nhật thành công!");
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
   const handleSelectCategory = (id: number, checked: boolean) => {
     setSelectedCategories((prev) =>
       checked ? [...prev, id] : prev.filter((item) => item !== id)
@@ -269,7 +237,6 @@ export default function CategoriesPage() {
         body: JSON.stringify({
           childrenCategoryName: newChildCategory.name,
           parentCategoryId: newChildCategory.parentCategoryId,
-          description: newChildCategory.description,
           childrenCategoryID: 0,
         }),
       });
@@ -278,7 +245,7 @@ export default function CategoriesPage() {
         throw new Error(result.message || "Lỗi khi tạo danh mục con");
       }
       // Reset form và load lại danh sách danh mục con
-      setNewChildCategory({ name: "", parentCategoryId: 0, description: "" });
+      setNewChildCategory({ name: "", parentCategoryId: 0 });
       setSuccess("Danh mục con đã được tạo thành công!");
       fetchChildrenCategories();
     } catch (err: any) {
@@ -384,7 +351,7 @@ export default function CategoriesPage() {
             Thêm danh mục cha mới
           </h2>
           <form onSubmit={handleCreateCategory} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label htmlFor="categoryName" className="block text-sm font-medium text-gray-700 mb-1">
                   Tên danh mục <span className="text-red-500">*</span>
@@ -397,19 +364,6 @@ export default function CategoriesPage() {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                   placeholder="Nhập tên danh mục"
-                />
-              </div>
-              <div>
-                <label htmlFor="categoryDescription" className="block text-sm font-medium text-gray-700 mb-1">
-                  Mô tả
-                </label>
-                <input
-                  id="categoryDescription"
-                  type="text"
-                  value={newCategoryDescription}
-                  onChange={(e) => setNewCategoryDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  placeholder="Nhập mô tả danh mục"
                 />
               </div>
             </div>
@@ -475,9 +429,6 @@ export default function CategoriesPage() {
                     Tên danh mục
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Mô tả
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Hành động
                   </th>
                 </tr>
@@ -497,78 +448,25 @@ export default function CategoriesPage() {
                       #{category.id}
                     </td>
                     <td className="px-6 py-4">
-                      {editingCategory && editingCategory.id === category.id ? (
-                        <input
-                          type="text"
-                          value={editingCategory.categoryName}
-                          onChange={(e) =>
-                            setEditingCategory({ ...editingCategory, categoryName: e.target.value })
-                          }
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      ) : (
-                        <div className="flex items-center">
-                          <Folder className="w-4 h-4 text-emerald-600 mr-2" />
-                          <span className="text-sm font-medium text-gray-900">{category.categoryName}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      {editingCategory && editingCategory.id === category.id ? (
-                        <textarea
-                          value={editingCategory.description}
-                          onChange={(e) =>
-                            setEditingCategory({ ...editingCategory, description: e.target.value })
-                          }
-                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          rows={2}
-                        />
-                      ) : (
-                        <span className="text-sm text-gray-600">{category.description || "Chưa có mô tả"}</span>
-                      )}
+                      <div className="flex items-center">
+                        <Folder className="w-4 h-4 text-emerald-600 mr-2" />
+                        <span className="text-sm font-medium text-gray-900">{category.categoryName}</span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {editingCategory && editingCategory.id === category.id ? (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={handleUpdateCategory}
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-emerald-600 hover:bg-emerald-700"
-                          >
-                            <Save className="w-3 h-3 mr-1" />
-                            Lưu
-                          </button>
-                          <button
-                            onClick={() => setEditingCategory(null)}
-                            className="inline-flex items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
-                          >
-                            <X className="w-3 h-3 mr-1" />
-                            Hủy
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEditCategory(category)}
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-emerald-600 bg-emerald-100 hover:bg-emerald-200"
-                          >
-                            <Edit3 className="w-3 h-3 mr-1" />
-                            Sửa
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCategory(category.id)}
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-red-600 bg-red-100 hover:bg-red-200"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Xoá
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        onClick={() => handleDeleteCategory(category.id)}
+                        className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-red-600 bg-red-100 hover:bg-red-200"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Xoá
+                      </button>
                     </td>
                   </tr>
                 ))}
                 {filteredCategories.length === 0 && (
                   <tr>
-                    <td className="px-6 py-12 text-center" colSpan={5}>
+                    <td className="px-6 py-12 text-center" colSpan={4}>
                       <div className="flex flex-col items-center space-y-3">
                         <div className="p-3 bg-gray-100 rounded-full">
                           <Folder className="w-6 h-6 text-gray-400" />
@@ -595,7 +493,7 @@ export default function CategoriesPage() {
             Thêm danh mục con mới
           </h2>
           <form onSubmit={handleCreateChildCategory} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="childCategoryName" className="block text-sm font-medium text-gray-700 mb-1">
                   Tên danh mục con <span className="text-red-500">*</span>
@@ -630,21 +528,6 @@ export default function CategoriesPage() {
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label htmlFor="childCategoryDescription" className="block text-sm font-medium text-gray-700 mb-1">
-                  Mô tả
-                </label>
-                <input
-                  id="childCategoryDescription"
-                  type="text"
-                  value={newChildCategory.description}
-                  onChange={(e) =>
-                    setNewChildCategory({ ...newChildCategory, description: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Nhập mô tả"
-                />
               </div>
             </div>
             <button
@@ -712,9 +595,6 @@ export default function CategoriesPage() {
                     Danh mục cha
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Mô tả
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Hành động
                   </th>
                 </tr>
@@ -747,9 +627,6 @@ export default function CategoriesPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-sm text-gray-600">{child.description || "Chưa có mô tả"}</span>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         onClick={() => handleDeleteChildCategory(child.id)}
@@ -763,7 +640,7 @@ export default function CategoriesPage() {
                 ))}
                 {filteredChildrenCategories.length === 0 && (
                   <tr>
-                    <td className="px-6 py-12 text-center" colSpan={6}>
+                    <td className="px-6 py-12 text-center" colSpan={5}>
                       <div className="flex flex-col items-center space-y-3">
                         <div className="p-3 bg-gray-100 rounded-full">
                           <FolderOpen className="w-6 h-6 text-gray-400" />

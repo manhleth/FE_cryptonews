@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,7 +12,10 @@ import {
   CheckCircle, 
   AlertCircle, 
   Loader2,
-  ChevronLeft
+  ChevronLeft,
+  Lock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,56 +39,105 @@ const forgotPasswordSchema = z.object({
     .email("Email không đúng định dạng"),
 });
 
+// Schema validation cho OTP
+const otpSchema = z.object({
+  otp: z
+    .string()
+    .min(6, "OTP phải có 6 số")
+    .max(6, "OTP phải có 6 số")
+    .regex(/^\d{6}$/, "OTP phải là 6 chữ số"),
+});
+
+// Schema validation cho mật khẩu mới
+const newPasswordSchema = z
+  .object({
+    newPassword: z
+      .string()
+      .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
+      .regex(/[A-Z]/, "Phải có ít nhất 1 chữ hoa")
+      .regex(/\d/, "Phải có ít nhất 1 chữ số")
+      .regex(/[^A-Za-z0-9]/, "Phải có ít nhất 1 ký tự đặc biệt"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Mật khẩu xác nhận không khớp",
+    path: ["confirmPassword"],
+  });
+
 type ForgotPasswordSchema = z.infer<typeof forgotPasswordSchema>;
+type OtpSchema = z.infer<typeof otpSchema>;
+type NewPasswordSchema = z.infer<typeof newPasswordSchema>;
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const { toast } = useToast();
   
-  // States
+  // States để điều khiển flow
+  const [currentStep, setCurrentStep] = useState<'email' | 'otp' | 'newPassword' | 'success'>('email');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isEmailSent, setIsEmailSent] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
+  const [countdown, setCountdown] = useState(0);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Form setup
-  const form = useForm<ForgotPasswordSchema>({
+  // OTP input refs
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [otpValues, setOtpValues] = useState<string[]>(['', '', '', '', '', '']);
+
+  // Form setups
+  const emailForm = useForm<ForgotPasswordSchema>({
     resolver: zodResolver(forgotPasswordSchema),
-    defaultValues: {
-      email: "",
-    },
+    defaultValues: { email: "" },
   });
 
-  // Handle form submission
-  const onSubmit = async (data: ForgotPasswordSchema) => {
+  const otpForm = useForm<OtpSchema>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: { otp: "" },
+  });
+
+  const passwordForm = useForm<NewPasswordSchema>({
+    resolver: zodResolver(newPasswordSchema),
+    defaultValues: { newPassword: "", confirmPassword: "" },
+  });
+
+  // Countdown timer effect
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  // Handle email submission
+  const onEmailSubmit = async (data: ForgotPasswordSchema) => {
     setIsSubmitting(true);
     
     try {
-      // Gọi API quên mật khẩu
-      const response = await fetch("http://localhost:5000/api/User/ForgotPassword", {
+      const response = await fetch(`http://localhost:5000/api/User/Request-forgot-password?email=${data.email}`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email: data.email }),
+        credentials: "include",
       });
-
-      if (!response.ok) {
-        throw new Error("Có lỗi xảy ra khi gửi yêu cầu");
-      }
 
       const result = await response.json();
       
-      if (result.statusCode === 1) {
-        // Thành công
-        setSubmittedEmail(data.email);
-        setIsEmailSent(true);
-        toast({
-          title: "Email đã được gửi",
-          description: `Vui lòng kiểm tra hộp thư của ${data.email}`,
-          duration: 5000
-        });
+      if (response.ok) {
+        
+          // Lưu email đã submit để dùng cho các bước sau
+          setSubmittedEmail(data.email);
+          // Chuyển sang bước nhập OTP
+          setCurrentStep('otp');
+          // Set countdown cho OTP
+          setCountdown(300);
+          
+          toast({
+            title: "Thành công",
+            description: "Mã OTP đã được gửi đến email của bạn",
+            duration: 3000
+          });
+        
       } else {
-        throw new Error(result.message || "Không thể gửi email reset password");
+        throw new Error("Có lỗi xảy ra khi gửi yêu cầu");
       }
     } catch (error: any) {
       console.error("Forgot password error:", error);
@@ -100,37 +152,143 @@ export default function ForgotPasswordPage() {
     }
   };
 
-  // Handle resend email
-  const handleResendEmail = async () => {
-    if (!submittedEmail) return;
+  // Handle OTP input
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return; // Only allow digits
+    
+    const newValues = [...otpValues];
+    newValues[index] = value;
+    setOtpValues(newValues);
+    
+    // Auto focus next input
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+    
+    // Update form value
+    const otpString = newValues.join('');
+    otpForm.setValue('otp', otpString);
+  };
+
+  // Handle OTP submission
+  const onOtpSubmit = async (data: OtpSchema) => {
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch("http://localhost:5000/api/User/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          otp: data.otp 
+        }),
+        credentials: "include",
+      });
+
+      const result = await response.json();
+      
+      
+        // Chuyển sang bước nhập mật khẩu mới
+        setCurrentStep('newPassword');
+        toast({
+          title: "Xác thực thành công",
+          description: "Vui lòng nhập mật khẩu mới",
+          duration: 3000
+        });
+      
+    } catch (error: any) {
+      console.error("OTP verification error:", error);
+      toast({
+        title: "Lỗi xác thực",
+        description: error.message || "Mã OTP không đúng. Vui lòng thử lại.",
+        variant: "destructive",
+        duration: 5000
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle new password submission
+  const onNewPasswordSubmit = async (data: NewPasswordSchema) => {
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch("http://localhost:5000/api/User/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          newPassword: data.newPassword,
+          confirmPassword: data.confirmPassword
+        }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Có lỗi xảy ra khi đặt lại mật khẩu");
+      }
+
+      const result = await response.json();
+      
+
+        setCurrentStep('success');
+        toast({
+          title: "Đặt lại mật khẩu thành công",
+          description: "Bạn có thể đăng nhập với mật khẩu mới",
+          duration: 5000
+        });
+        router.push("/User/Login");
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      toast({
+        title: "Lỗi",
+        description: error.message || "Không thể đặt lại mật khẩu. Vui lòng thử lại.",
+        variant: "destructive",
+        duration: 5000
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle resend OTP
+  const handleResendOtp = async () => {
+    if (countdown > 0) return;
     
     setIsSubmitting(true);
     try {
       const response = await fetch("http://localhost:5000/api/User/ForgotPassword", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: submittedEmail }),
       });
 
       if (response.ok) {
+        setCountdown(300);
+        setOtpValues(['', '', '', '', '', '']);
+        otpForm.reset();
         toast({
-          title: "Email đã được gửi lại",
-          description: `Vui lòng kiểm tra hộp thư của ${submittedEmail}`,
+          title: "OTP đã được gửi lại",
+          description: `Mã OTP mới đã được gửi đến ${submittedEmail}`,
           duration: 3000
         });
       }
     } catch (error) {
       toast({
         title: "Lỗi",
-        description: "Không thể gửi lại email",
+        description: "Không thể gửi lại OTP",
         variant: "destructive",
         duration: 3000
       });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Format countdown time
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -153,25 +311,23 @@ export default function ForgotPasswordPage() {
           </Link>
         </div>
 
-        {!isEmailSent ? (
-          // Form nhập email
+        {/* Step 1: Email Input */}
+        {currentStep === 'email' && (
           <>
-            {/* Header */}
             <div className="text-center mb-8 mt-8">
               <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mb-4">
                 <KeyRound className="w-8 h-8 text-emerald-600" />
               </div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">Quên mật khẩu?</h2>
               <p className="text-gray-600">
-                Không sao cả! Nhập email để nhận liên kết đặt lại mật khẩu
+                Không sao cả! Nhập email để nhận mã OTP đặt lại mật khẩu
               </p>
             </div>
 
-            {/* Form */}
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <Form {...emailForm}>
+              <div className="space-y-6">
                 <FormField
-                  control={form.control}
+                  control={emailForm.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -196,7 +352,7 @@ export default function ForgotPasswordPage() {
                 />
 
                 <Button
-                  type="submit"
+                  onClick={emailForm.handleSubmit(onEmailSubmit)}
                   disabled={isSubmitting}
                   className="w-full h-12 bg-emerald-600 text-white hover:bg-emerald-700 font-medium rounded-lg transition-colors"
                 >
@@ -206,13 +362,12 @@ export default function ForgotPasswordPage() {
                       Đang gửi...
                     </div>
                   ) : (
-                    "Gửi liên kết đặt lại"
+                    "Gửi mã OTP"
                   )}
                 </Button>
-              </form>
+              </div>
             </Form>
 
-            {/* Footer links */}
             <div className="mt-6 text-center">
               <p className="text-sm text-gray-600">
                 Nhớ mật khẩu rồi?{" "}
@@ -222,64 +377,208 @@ export default function ForgotPasswordPage() {
               </p>
             </div>
           </>
-        ) : (
-          // Success state - Email đã gửi
+        )}
+
+        {/* Step 2: OTP Input */}
+        {currentStep === 'otp' && (
           <>
-            {/* Success Header */}
             <div className="text-center mb-8 mt-8">
-              <div className="mx-auto w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mb-4">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mb-4">
+                <Mail className="w-8 h-8 text-blue-600" />
               </div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">Email đã được gửi!</h2>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Nhập mã OTP</h2>
               <p className="text-gray-600 mb-4">
-                Chúng tôi đã gửi liên kết đặt lại mật khẩu đến
+                Chúng tôi đã gửi mã 6 số đến
               </p>
               <p className="font-semibold text-emerald-600 bg-emerald-50 px-4 py-2 rounded-lg">
                 {submittedEmail}
               </p>
             </div>
 
-            {/* Instructions */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <div className="flex items-start">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium mb-1">Hướng dẫn:</p>
-                  <ul className="space-y-1 text-xs">
-                    <li>• Kiểm tra hộp thư đến và thư mục spam</li>
-                    <li>• Click vào liên kết trong email để đặt lại mật khẩu</li>
-                    <li>• Liên kết có hiệu lực trong 15 phút</li>
-                  </ul>
-                </div>
+            <Form {...otpForm}>
+              <div className="space-y-6">
+                <FormItem>
+                  <FormLabel className="text-sm font-medium text-gray-700">
+                    Mã OTP (6 số)
+                  </FormLabel>
+                  <div className="flex gap-2 justify-center">
+                    {[0, 1, 2, 3, 4, 5].map((index) => (
+                      <Input
+                        key={index}
+                        type="text"
+                        maxLength={1}
+                        value={otpValues[index]}
+                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
+                            otpInputRefs.current[index - 1]?.focus();
+                          }
+                        }}
+                        className="w-12 h-12 text-center text-lg font-bold border-gray-300 focus:border-emerald-500"
+                        disabled={isSubmitting}
+                        ref={(el) => {
+                          otpInputRefs.current[index] = el;
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+
+                <Button
+                  onClick={otpForm.handleSubmit(onOtpSubmit)}
+                  disabled={isSubmitting || otpValues.join('').length !== 6}
+                  className="w-full h-12 bg-emerald-600 text-white hover:bg-emerald-700 font-medium rounded-lg transition-colors"
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Đang xác thực...
+                    </div>
+                  ) : (
+                    "Xác thực OTP"
+                  )}
+                </Button>
               </div>
+            </Form>
+
+            {/* Countdown and Resend */}
+            <div className="mt-6 text-center">
+              {countdown > 0 ? (
+                <p className="text-sm text-gray-600">
+                  Gửi lại OTP sau: <span className="font-mono text-emerald-600">{formatTime(countdown)}</span>
+                </p>
+              ) : (
+                <Button
+                  onClick={handleResendOtp}
+                  variant="ghost"
+                  disabled={isSubmitting}
+                  className="text-emerald-600 hover:text-emerald-700"
+                >
+                  Gửi lại mã OTP
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Step 3: New Password */}
+        {currentStep === 'newPassword' && (
+          <>
+            <div className="text-center mb-8 mt-8">
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mb-4">
+                <Lock className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Đặt mật khẩu mới</h2>
+              <p className="text-gray-600">
+                Tạo mật khẩu mạnh để bảo vệ tài khoản của bạn
+              </p>
             </div>
 
-            {/* Action buttons */}
-            <div className="space-y-3">
-              <Button
-                onClick={handleResendEmail}
-                disabled={isSubmitting}
-                variant="outline"
-                className="w-full h-12 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-              >
-                {isSubmitting ? (
-                  <div className="flex items-center justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Đang gửi lại...
-                  </div>
-                ) : (
-                  "Gửi lại email"
-                )}
-              </Button>
-              
-              <Button
-                onClick={() => router.push("/User/Login")}
-                variant="ghost"
-                className="w-full h-12 text-gray-600 hover:text-gray-900"
-              >
-                Quay lại đăng nhập
-              </Button>
+            <Form {...passwordForm}>
+              <div className="space-y-6">
+                <FormField
+                  control={passwordForm.control}
+                  name="newPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-gray-700">
+                        Mật khẩu mới
+                      </FormLabel>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <FormControl>
+                          <Input
+                            type={showNewPassword ? "text" : "password"}
+                            placeholder="Nhập mật khẩu mới"
+                            className="pl-11 pr-11 h-12 border-gray-300 focus:border-emerald-500"
+                            disabled={isSubmitting}
+                            {...field}
+                          />
+                        </FormControl>
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={passwordForm.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium text-gray-700">
+                        Xác nhận mật khẩu
+                      </FormLabel>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <FormControl>
+                          <Input
+                            type={showConfirmPassword ? "text" : "password"}
+                            placeholder="Nhập lại mật khẩu"
+                            className="pl-11 pr-11 h-12 border-gray-300 focus:border-emerald-500"
+                            disabled={isSubmitting}
+                            {...field}
+                          />
+                        </FormControl>
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button
+                  onClick={passwordForm.handleSubmit(onNewPasswordSubmit)}
+                  disabled={isSubmitting}
+                  className="w-full h-12 bg-emerald-600 text-white hover:bg-emerald-700 font-medium rounded-lg transition-colors"
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Đang cập nhật...
+                    </div>
+                  ) : (
+                    "Đặt lại mật khẩu"
+                  )}
+                </Button>
+              </div>
+            </Form>
+          </>
+        )}
+
+        {/* Step 4: Success */}
+        {currentStep === 'success' && (
+          <>
+            <div className="text-center mb-8 mt-8">
+              <div className="mx-auto w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mb-4">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">Thành công!</h2>
+              <p className="text-gray-600 mb-6">
+                Mật khẩu của bạn đã được đặt lại thành công. Bạn có thể đăng nhập với mật khẩu mới.
+              </p>
             </div>
+
+            <Button
+              onClick={() => router.push("/User/Login")}
+              className="w-full h-12 bg-emerald-600 text-white hover:bg-emerald-700 font-medium rounded-lg transition-colors"
+            >
+              Đến trang đăng nhập
+            </Button>
           </>
         )}
 

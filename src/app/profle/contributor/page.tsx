@@ -247,7 +247,7 @@ export default function ContributorPage() {
         // Hiển thị thông báo thành công
         toast({
           title: "Đăng bài viết thành công",
-          description: "Bài viết của bạn đã được tạo và đang chờ duyệt",
+          description: "Đăng bài viết thành công",
           duration: 3000
         });
         
@@ -543,10 +543,6 @@ export default function ContributorPage() {
               <FileText className="w-5 h-5 mr-2 text-emerald-600" />
               Bài viết của tôi ({myPosts.length})
             </h2>
-            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-              <Info className="w-3 h-3 mr-1" />
-              Bài viết sẽ hiển thị sau khi được quản trị viên duyệt
-            </Badge>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

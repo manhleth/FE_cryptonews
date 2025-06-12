@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useRef, useState } from 'react';
-import { Search, X, Settings, Pencil, LogOut, Shield, Bookmark, FileText, Heart } from 'lucide-react';
+import { Search, X, Pencil, LogOut, Shield, Bookmark, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePathname, useRouter } from 'next/navigation';
@@ -16,7 +16,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
@@ -313,68 +312,68 @@ export const HeaderCrypto = () => {
           </div>
 
           {/* ================== MIDDLE SECTION - NAVIGATION ================== */}
-  <nav className="hidden md:flex items-center gap-6 mx-4">
-  {/* Home Link */}
-  <a 
-    href="/" 
-    className={`text-gray-600 hover:text-gray-900 pb-1 ${
-      selectedCategoryId === null ? 'border-b border-gray-900' : ''
-    }`} 
-    onClick={handleHomeClick}
-  >
-    Home
-  </a>
-  
-  {/* Watchlist Link - chỉ hiển thị khi đã đăng nhập */}
-  {user && (
-    <Link 
-      href="/watchlist"
-      className={`text-gray-600 hover:text-gray-900 pb-1 flex items-center gap-1 ${
-        pathname === '/watchlist' ? 'border-b border-gray-900' : ''
-      }`}
-    >
-      Watchlist
-    </Link>
-  )}
-  
-  {/* Categories Navigation */}
-  {loading ? (
-    <span>Đang tải...</span>
-  ) : error ? (
-    <span>Lỗi: {error}</span>
-  ) : (
-    categories.map((category: any) => (
-      <a
-        key={category.categoryId}
-        href={`/category/${category.categoryId}`}
-        className={`text-gray-600 hover:text-gray-900 pb-1 ${
-          selectedCategoryId === category.categoryId ? 'border-b border-gray-900' : ''
-        }`}
-        onClick={(e) => { 
-          e.preventDefault(); 
-          handleCategoryClick(category.categoryId);
-        }}
-      >
-        {category.categoryName}
-      </a>
-    ))
-  )}
-</nav>
-
-          {/* ================== RIGHT SECTION - SETTINGS & USER ================== */}
-          <div className="flex items-center gap-4">
+          <nav className="hidden md:flex items-center gap-6 mx-4">
+            {/* Home Link */}
+            <a 
+              href="/" 
+              className={`text-gray-600 hover:text-gray-900 pb-1 ${
+                selectedCategoryId === null && pathname === '/' ? 'border-b border-gray-900' : ''
+              }`} 
+              onClick={handleHomeClick}
+            >
+              Home
+            </a>
             
-            {/* Settings Dropdown */}
-            <div className="relative group">
-              <button className="p-2 hover:bg-gray-100 rounded-full">
-                <Settings className="h-5 w-5 text-gray-600" />
-              </button>
-              
-              {/* Theme Switcher Dropdown */}
-              <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
-                <ThemeSwitcher />
-              </div>
-            </div>
+            {/* Trading Link - chỉ hiển thị khi đã đăng nhập */}
+            {user && (
+              <Link 
+                href="/trading"
+                className={`text-gray-600 hover:text-gray-900 pb-1 ${
+                  pathname === '/trading' ? 'border-b border-gray-900' : ''
+                }`}
+              >
+                Giao dịch
+              </Link>
+            )}
+            
+            {/* Watchlist Link - chỉ hiển thị khi đã đăng nhập */}
+            {user && (
+              <Link 
+                href="/watchlist"
+                className={`text-gray-600 hover:text-gray-900 pb-1 flex items-center gap-1 ${
+                  pathname === '/watchlist' ? 'border-b border-gray-900' : ''
+                }`}
+              >
+                Watchlist
+              </Link>
+            )}
+            
+            {/* Categories Navigation */}
+            {loading ? (
+              <span>Đang tải...</span>
+            ) : error ? (
+              <span>Lỗi: {error}</span>
+            ) : (
+              categories.map((category: any) => (
+                <a
+                  key={category.categoryId}
+                  href={`/category/${category.categoryId}`}
+                  className={`text-gray-600 hover:text-gray-900 pb-1 ${
+                    selectedCategoryId === category.categoryId ? 'border-b border-gray-900' : ''
+                  }`}
+                  onClick={(e) => { 
+                    e.preventDefault(); 
+                    handleCategoryClick(category.categoryId);
+                  }}
+                >
+                  {category.categoryName}
+                </a>
+              ))
+            )}
+          </nav>
+
+          {/* ================== RIGHT SECTION - USER ONLY ================== */}
+          <div className="flex items-center gap-4">
             
             {/* User Avatar/Sign In */}
             {user ? (

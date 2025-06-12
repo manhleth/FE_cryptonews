@@ -178,10 +178,6 @@ export default function LoginPage() {
 
               <Separator />
 
-              <Button variant="outline" className="w-full">
-                Đăng nhập với Google
-              </Button>
-
               <div className="text-center text-sm text-gray-500">
                 Bạn chưa có tài khoản?{" "}
                 <a

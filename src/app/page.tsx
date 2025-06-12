@@ -59,8 +59,8 @@ const SECTIONS_CONFIG = [
   {
     id: 'airdrop',
     title: 'Airdrop & Retroactive',
-    categoryId: 2,
-    linkTo: '/category/2'
+    categoryId: 1,
+    linkTo: '/category/1'
   }
 ];
 
@@ -442,11 +442,11 @@ export default function Home() {
                 Crypto Insights
               </h1>
               <p className="text-lg md:text-xl text-emerald-50 max-w-2xl mx-auto">
-                Khám phá thế giới tiền điện tử với những thông tin mới nhất và khóa học chuyên sâu
+                Khám phá thế giới tiền điện tử với những thông tin mới nhất
               </p>
             </div>
             <div className="flex justify-center">
-              <Link href="/category/4">
+              <Link href="/category/3">
                 <Button size="default" className="bg-white text-emerald-600 hover:bg-gray-50 px-6 py-2 rounded-full font-semibold flex items-center">
                   KIẾN THỨC
                   <ArrowRight className="ml-2 h-4 w-4" />
