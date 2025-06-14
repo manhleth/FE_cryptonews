@@ -1,15 +1,11 @@
-// src/app/news/[id]/page.tsx
-"use client"
-import { notFound } from "next/navigation";
-import { Share2, BookmarkIcon, Clock, User, Calendar } from "lucide-react";
-import { use, useEffect, useState } from "react";
-import { useAuth } from "@/context/AuthContext";
-import CommentSection from "@/components/Comments";
-import Link from "next/link";
+"use client";
 
-interface NewsDetailPageProps {
-  params: Promise<{ id: string }> | { id: string };
-}
+import { useEffect, useState, useRef } from "react";
+import { useParams } from "next/navigation";
+import { Share2, BookmarkIcon, Clock, User, Calendar } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useAnalytics } from "@/hooks/useAnalytics";
+import Link from "next/link";
 
 interface NewsData {
   newsId?: number;
@@ -35,12 +31,31 @@ interface Comment {
   createdDate?: string;
 }
 
-export default function NewsDetailPage({ params }: NewsDetailPageProps) {
-  const resolvedParams = params instanceof Promise ? use(params) : params;
-  const { id } = resolvedParams;
+export default function NewsDetailPage() {
+  const params = useParams();
+  const id = params.id as string;
   const { token, user } = useAuth();
   
-  // Hàm format thời gian cho comments
+  // Analytics hooks and refs
+  const { trackNewsView, trackActivity } = useAnalytics();
+  const sessionStartTime = useRef<number>(Date.now());
+  const hasTrackedView = useRef<boolean>(false);
+  
+  // States
+  const [item, setItem] = useState<NewsData | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [visibleCount, setVisibleCount] = useState(5);
+  const [newComment, setNewComment] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [relatedPosts, setRelatedPosts] = useState<NewsData[]>([]);
+  const [newestPosts, setNewestPosts] = useState<NewsData[]>([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+  const [loadingNewest, setLoadingNewest] = useState(false);
+
+  // Helper functions
   const formatTimeAgo = (date: string | Date) => {
     const now = new Date();
     const commentDate = new Date(date);
@@ -52,90 +67,82 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
   };
 
-  // Hàm format ngày đăng
-  const formatPublishDate = (date: string | Date | undefined) => {
-    if (!date) return 'Hôm nay';
-    
-    const publishDate = new Date(date);
-    const options: Intl.DateTimeFormatOptions = {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    };
-    
-    return publishDate.toLocaleDateString('vi-VN', options);
-  };
-  
-  // States
-  const [item, setItem] = useState<NewsData | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [visibleCount, setVisibleCount] = useState(5);
-  const [newComment, setNewComment] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
-  // State cho bài viết liên quan và bài viết mới nhất
-  const [relatedPosts, setRelatedPosts] = useState<NewsData[]>([]);
-  const [newestPosts, setNewestPosts] = useState<NewsData[]>([]);
-  const [loadingRelated, setLoadingRelated] = useState(false);
-  const [loadingNewest, setLoadingNewest] = useState(false);
+  // Track initial news view when component mounts
+  useEffect(() => {
+    if (id && !hasTrackedView.current) {
+      sessionStartTime.current = Date.now();
+      trackNewsView(Number(id));
+      hasTrackedView.current = true;
+    }
+  }, [id, trackNewsView]);
 
-  // Debug logs
-  console.log("NewsDetailPage mounted");
-  console.log("ID from params:", id);
-  console.log("Token:", token ? "exists" : "missing");
+  // Track session duration when user leaves
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (id) {
+        const sessionDuration = Math.floor((Date.now() - sessionStartTime.current) / 1000);
+        trackNewsView(Number(id), sessionDuration);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && id) {
+        const sessionDuration = Math.floor((Date.now() - sessionStartTime.current) / 1000);
+        if (sessionDuration > 10) {
+          trackNewsView(Number(id), sessionDuration);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
+  }, [id, trackNewsView]);
 
   // Fetch news data
   useEffect(() => {
-    console.log("useEffect triggered - token:", !!token, "id:", id);
-    
     const fetchNewsData = async () => {
       try {
-        console.log("Fetching news data for ID:", id);
         setIsInitialLoading(true);
         setError(null);
         
-        const response = await fetch(
-          `http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`
-        );
-
-        console.log("API Response status:", response.status);
+        const response = await fetch(`http://localhost:5000/api/News/GetNewsByIdAsync?id=${id}`);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log("API Response data:", data);
         
         if (data && data.statusCode === 1 && data.data) {
           setItem(data.data);
-          console.log("News item set successfully");
         } else {
-          console.error("Invalid API response structure or no data");
           setError("Không tìm thấy bài viết");
         }
       } catch (error: any) {
-        console.error("Error fetching news:", error);
         setError(error.message || "Có lỗi xảy ra khi tải bài viết");
       } finally {
         setIsInitialLoading(false);
       }
     };
 
-    fetchNewsData();
+    if (id) {
+      fetchNewsData();
+    }
   }, [id]);
 
-  // Fetch bài viết mới nhất
+  // Fetch newest posts
   useEffect(() => {
     const fetchNewestPosts = async () => {
       try {
         setLoadingNewest(true);
-        const response = await fetch(
-          `http://localhost:5000/api/News/GetNewest`
-        );
+        const response = await fetch(`http://localhost:5000/api/News/GetNewest`);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -144,7 +151,6 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
         const data = await response.json();
         
         if (data && data.statusCode === 1 && data.data) {
-          // Lọc ra bài viết hiện tại và chỉ lấy 4 bài mới nhất
           const filteredPosts = data.data
             .filter((post: NewsData) => (post.newsId || post.newsID) != Number(id))
             .slice(0, 4);
@@ -158,19 +164,19 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
       }
     };
 
-    fetchNewestPosts();
+    if (id) {
+      fetchNewestPosts();
+    }
   }, [id]);
 
-  // Fetch bài viết liên quan khi có thông tin về categoryId
+  // Fetch related posts when we have categoryId
   useEffect(() => {
     if (!item || !item.categoryId) return;
 
     const fetchRelatedPosts = async () => {
       try {
         setLoadingRelated(true);
-        const response = await fetch(
-          `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${item.categoryId}`
-        );
+        const response = await fetch(`http://localhost:5000/api/News/GetNewsByCategoryTop?category=${item.categoryId}`);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -179,7 +185,6 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
         const data = await response.json();
         
         if (data && data.statusCode === 1 && data.data) {
-          // Lọc ra các bài viết khác với bài viết hiện tại và chỉ lấy 3 bài
           const filteredPosts = data.data
             .filter((post: NewsData) => (post.newsId || post.newsID) != Number(id))
             .slice(0, 3);
@@ -196,48 +201,33 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     fetchRelatedPosts();
   }, [item, id]);
 
-  // Fetch saved status - chỉ khi đã đăng nhập
+  // Fetch saved status
   useEffect(() => {
     if (!token || !item) return;
 
     const fetchSavedNews = async () => {
       try {
-        console.log("Fetching saved news for user...");
-        
-        const response = await fetch(
-          'http://localhost:5000/api/Saved/GetYourListSaved',
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
+        const response = await fetch('http://localhost:5000/api/Saved/GetYourListSaved', {
+          headers: {
+            Authorization: `Bearer ${token}`
           }
-        );
-
-        console.log("Saved news API response status:", response.status);
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log("Saved news API response data:", data);
         
         if (data && data.statusCode === 1 && data.data) {
-          // Kiểm tra cấu trúc dữ liệu trả về
           const savedItems = Array.isArray(data.data) ? data.data : [];
-          console.log("Saved items:", savedItems);
           
-          // Tìm kiếm bài viết hiện tại trong danh sách đã lưu
           const isCurrentNewsSaved = savedItems.some((saved: any) => {
-            console.log("Checking saved item:", saved);
-            // Kiểm tra cả newsId và newsID (case-insensitive)
             return saved.newsId == Number(id) || saved.newsID == Number(id) || saved.NewsId == Number(id) || saved.NewsID == Number(id);
           });
           
           setIsSaved(isCurrentNewsSaved);
-          console.log("Is current news saved:", isCurrentNewsSaved);
         } else {
-          console.log("No saved news data or invalid response structure");
           setIsSaved(false);
         }
       } catch (error) {
@@ -249,84 +239,66 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     fetchSavedNews();
   }, [token, id, item]);
 
-  // Fetch comments - KHÔNG cần token để xem comments
+  // Fetch comments
   useEffect(() => {
     if (!item) return;
 
     const fetchComments = async () => {
       try {
-        console.log("Fetching comments for newsID:", id);
-        
-        // Bỏ Authorization header để cho phép anonymous access
-        const response = await fetch(
-          `http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json'
-            }
+        const response = await fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
           }
-        );
-
-        console.log("Comments API Response status:", response.status);
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log("Comments API Response data:", data);
         
         if (data && data.statusCode === 1) {
           setComments(data.data || []);
-          console.log("Comments set successfully:", data.data);
         } else {
-          console.log("No comments or invalid response structure");
           setComments([]);
         }
       } catch (error) {
         console.error("Error fetching comments:", error);
-        setComments([]); // Set empty array on error
+        setComments([]);
       }
     };
 
     fetchComments();
-  }, [id, item]); // Bỏ token dependency
+  }, [id, item]);
 
+  // Handle comment submission
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() || !token) return;
 
     try {
       setLoading(true);
-      console.log("Submitting comment:", { newsId: id, content: newComment });
       
-      const response = await fetch(
-        `http://localhost:5000/api/Comment/CreateNewComment`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            newsId: Number(id),
-            content: newComment,
-          }),
-        }
-      );
-
-      console.log("Comment submission response status:", response.status);
+      const response = await fetch(`http://localhost:5000/api/Comment/CreateNewComment`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          newsId: Number(id),
+          content: newComment,
+        }),
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log("Comment submission response data:", data);
 
       if (data && data.statusCode === 1 && data.data) {
-        // Tạo comment object với thông tin user hiện tại
         const newCommentObj: Comment = {
           commentId: data.data.commentId || Date.now(),
           userId: user?.userId || 0,
@@ -335,10 +307,14 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           userAvartar: user?.avatar || "/default-avatar.png"
         };
 
-        // Thêm comment mới vào đầu danh sách
         setComments((prev) => [newCommentObj, ...prev]);
         setNewComment("");
-        console.log("Comment added successfully");
+
+        // Track comment activity
+        trackActivity({
+          activityType: 'COMMENT',
+          relatedNewsId: Number(id)
+        });
       }
     } catch (error) {
       console.error("Error adding comment:", error);
@@ -348,6 +324,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     }
   };
 
+  // Handle bookmark click
   const handleBookmarkClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -359,33 +336,29 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
 
     try {
       setLoading(true);
-      console.log("Gửi lưu bài viết newsID:", id);
       
-      const response = await fetch(
-        `http://localhost:5000/api/Saved/AddOrRemoveSaved?newsID=${id}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
+      const response = await fetch(`http://localhost:5000/api/Saved/AddOrRemoveSaved?newsID=${id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
         }
-      );
-
-      console.log("Bookmark response status:", response.status);
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log("Bookmark response data:", data);
       
-      // Kiểm tra response thành công
       if (data && data.statusCode === 1) {
-        // Toggle trạng thái saved
         setIsSaved(prev => !prev);
-        console.log("Bookmark toggled successfully, new state:", !isSaved);
+
+        // Track save post activity
+        trackActivity({
+          activityType: 'SAVE_POST',
+          relatedNewsId: Number(id)
+        });
       } else {
         console.error("API returned error:", data);
       }
@@ -396,6 +369,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     }
   };
 
+  // Handle share
   const handleShare = async () => {
     const link = window.location.href;
     try {
@@ -406,7 +380,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
     }
   };
 
-  // Loading state with skeleton
+  // Loading state
   if (isInitialLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white">
@@ -426,16 +400,6 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                 </div>
               </div>
             </div>
-            <div className="space-y-4">
-              <div className="h-8 bg-emerald-100 rounded"></div>
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="animate-pulse bg-white rounded-lg p-4">
-                  <div className="h-24 bg-emerald-100 rounded mb-3"></div>
-                  <div className="h-4 bg-emerald-100 rounded mb-2"></div>
-                  <div className="h-3 bg-emerald-100 rounded w-3/4"></div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -450,9 +414,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           <div className="w-24 h-24 mx-auto mb-6 bg-red-100 rounded-full flex items-center justify-center">
             <span className="text-3xl">⚠️</span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Có lỗi xảy ra
-          </h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Có lỗi xảy ra</h2>
           <p className="text-gray-600 mb-4">{error}</p>
           <button 
             onClick={() => window.location.reload()}
@@ -473,12 +435,8 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
           <div className="w-24 h-24 mx-auto mb-6 bg-red-100 rounded-full flex items-center justify-center">
             <span className="text-3xl">📄</span>
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Không tìm thấy bài viết
-          </h2>
-          <p className="text-gray-600">
-            Bài viết bạn đang tìm kiếm không tồn tại hoặc đã bị xóa
-          </p>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Không tìm thấy bài viết</h2>
+          <p className="text-gray-600">Bài viết bạn đang tìm kiếm không tồn tại hoặc đã bị xóa</p>
         </div>
       </div>
     );
@@ -549,9 +507,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                           : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
                       } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <BookmarkIcon
-                        className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`}
-                      />
+                      <BookmarkIcon className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
                       {isSaved ? 'Đã lưu' : 'Lưu bài'}
                     </button>
                   </div>
@@ -575,7 +531,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                     Bình luận ({comments.length})
                   </h2>
 
-                  {/* Form nhập comment - chỉ hiển thị khi đã đăng nhập */}
+                  {/* Comment Form */}
                   {token ? (
                     <form onSubmit={handleSubmitComment} className="flex items-start gap-3 mb-6">
                       <div className="h-8 w-8 rounded-full overflow-hidden flex-shrink-0">
@@ -617,12 +573,11 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                     </div>
                   )}
 
-                  {/* Danh sách comments */}
+                  {/* Comments List */}
                   <div className="space-y-3">
                     {comments.length > 0 ? (
                       comments.slice(0, visibleCount).map((comment, index) => (
                         <div key={comment.commentId || index} className="flex items-start gap-3">
-                          {/* Ảnh avatar */}
                           <div className="h-8 w-8 rounded-full overflow-hidden flex-shrink-0">
                             <img
                               src={comment.userAvartar || "/default-avatar.png"}
@@ -630,7 +585,6 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                               className="h-full w-full object-cover"
                             />
                           </div>
-                          {/* Khối nội dung comment */}
                           <div className="flex-1 min-w-0">
                             <div className="bg-gray-50 rounded-lg p-3">
                               <div className="flex items-center gap-2 mb-1">
@@ -652,7 +606,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                       </div>
                     )}
 
-                    {/* Nút Xem thêm nếu còn comment ẩn */}
+                    {/* Load More Comments */}
                     {visibleCount < comments.length && (
                       <div className="text-center">
                         <button
@@ -669,7 +623,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
             </article>
           </div>
 
-          {/* Sidebar - Bài viết mới nhất */}
+          {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="sticky top-8">
               <div className="bg-white rounded-2xl shadow-lg p-6 border border-emerald-100">
@@ -695,7 +649,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
                   </div>
                 ) : newestPosts.length > 0 ? (
                   <div className="space-y-4">
-                    {newestPosts.map((post, index) => (
+                    {newestPosts.map((post) => (
                       <Link 
                         href={`/news/${post.newsId || post.newsID}`} 
                         key={post.newsId || post.newsID} 
@@ -737,7 +691,7 @@ export default function NewsDetailPage({ params }: NewsDetailPageProps) {
         </div>
       </div>
 
-      {/* Related Posts - Di chuyển ra ngoài grid để hiển thị full width */}
+      {/* Related Posts */}
       <section className="max-w-6xl mx-auto px-4 pb-8">
         <div className="bg-white rounded-2xl shadow-lg p-8 border border-emerald-100">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">

@@ -37,7 +37,7 @@ export default function UsersPage() {
   
   const { toast } = useToast();
   const { token } = useAuth();
-  const valueToken = localStorage.getItem("tokenAdmin");
+ const valueToken = typeof window !== 'undefined' ? localStorage.getItem("tokenAdmin") : null;
 
   // Fetch users
   const fetchUsers = async () => {

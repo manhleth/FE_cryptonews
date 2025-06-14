@@ -1,5 +1,6 @@
 "use client";
-import { createContext, useContext, useState, useEffect } from "react";
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
   userId: number;
@@ -7,134 +8,101 @@ interface User {
   email: string;
   fullname: string;
   phonenumber: string;
-  birthday: string;
-  avatar: string;
+  birthday?: string;
+  avatar?: string;
   roleId: number;
 }
 
-interface AuthContextProps {
+interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string, user: User) => void;
+  login: (token: string, userData: User) => void;
   logout: () => void;
-  refreshUser: (customToken?: string) => Promise<void>;
+  loading: boolean;
 }
 
-const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+// Analytics tracking function
+const trackActivity = async (activityType: string, token?: string) => {
+  try {
+    if (!token) return;
+    
+    await fetch('http://localhost:5000/api/Analytics/TrackActivity', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        activityType: activityType
+      })
+    });
+  } catch (error) {
+    console.warn('Failed to track activity:', error);
+  }
+};
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = sessionStorage.getItem("token");
-    const storedUser = sessionStorage.getItem("user");
-    
-    if (storedToken) {
-      setToken(storedToken);
-      if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-          
-          // If user is an admin, store token as adminToken as well
-          if (parsedUser.roleId === 1) {
-            localStorage.setItem("tokenAdmin", storedToken);
-          }
-        } catch (e) {
-          console.error("Failed to parse stored user:", e);
-        }
+    // Check for existing token on mount
+    const savedToken = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+
+    if (savedToken && savedUser) {
+      try {
+        const userData = JSON.parse(savedUser);
+        setToken(savedToken);
+        setUser(userData);
+      } catch (error) {
+        console.error('Error parsing saved user data:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
       }
-      refreshUser(storedToken);
     }
-    
     setLoading(false);
   }, []);
 
-  const login = (newToken: string, newUser: User) => {
-    setToken(newToken);
-    setUser(newUser);
-    sessionStorage.setItem("token", newToken);
-    sessionStorage.setItem("user", JSON.stringify(newUser));
-    
-    // If the user is an admin, also store the token in localStorage for admin access
-    if (newUser.roleId === 1) {
-      localStorage.setItem("tokenAdmin", newToken);
+  const login = async (newToken: string, userData: User) => {
+    try {
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(userData));
+      setToken(newToken);
+      setUser(userData);
+
+      // Track login activity
+      await trackActivity('LOGIN', newToken);
+    } catch (error) {
+      console.error('Error during login:', error);
     }
   };
 
   const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setToken(null);
     setUser(null);
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    
-    // Also clear admin token
-    localStorage.removeItem("tokenAdmin");
   };
 
-  const refreshUser = async (customToken?: string) => {
-    const tokenToUse = customToken || token;
-    
-    if (!tokenToUse) {
-      console.log("No token available for refreshing user data");
-      return;
-    }
-    
-    try {
-      console.log("Refreshing user with token:", tokenToUse);
-      const res = await fetch("http://localhost:5000/api/User/GetUserInfor", {
-        headers: {
-          Authorization: `Bearer ${tokenToUse}`,
-        },
-      });
-      console.log("Phản hồi từ server: " + res);
-      if (!res.ok) {
-        throw new Error(`HTTP error! Status: ${res.status}`);
-      }
-      
-      const contentType = res.headers.get("Content-Type") || "";
-      
-      if (!contentType.includes("application/json")) {
-        throw new Error(`Expected JSON response but got ${contentType}`);
-      }
-      
-      const data = await res.json();
-      console.log("Data cập nhật: " +data);
-      if (data.statusCode === 1 && data.data) {
-        // Update the user state with the new data
-        setUser(data.data);
-        
-        // Also update sessionStorage
-        sessionStorage.setItem("user", JSON.stringify(data.data));
-        
-        // If user is an admin, ensure admin token is set
-        if (data.data.roleId === 1) {
-          localStorage.setItem("tokenAdmin", tokenToUse);
-        }
-        
-        console.log("User data refreshed successfully:", data.data);
-        return data.data;
-      } else {
-        console.error("Invalid response format:", data);
-        throw new Error(data.message || "Failed to refresh user data");
-      }
-    } catch (error) {
-      console.error("Error refreshing user:", error);
-      throw error;
-    }
+  const value = {
+    user,
+    token,
+    login,
+    logout,
+    loading,
   };
 
-  return (
-    <AuthContext.Provider value={{ token, user, login, logout, refreshUser }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
-  return context;
-}
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};

@@ -1,3 +1,4 @@
+// Update src/app/admin/layout.tsx - Add Analytics menu item
 "use client";
 
 import Link from "next/link";
@@ -11,7 +12,8 @@ import {
   LayoutDashboard,
   Menu,
   X,
-  LogOut
+  LogOut,
+  BarChart3 // Add this import
 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -22,7 +24,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const adminToken = localStorage.getItem("tokenAdmin");
     if (!adminToken) {
-      // Redirect to admin login if no token found
       router.push("/admin/login");
     }
   }, [router]);
@@ -47,6 +48,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       href: "/admin/comments",
       icon: MessageCircle,
       label: "Quản lý bình luận"
+    },
+    {
+      href: "/admin/analytics", // Add analytics menu item
+      icon: BarChart3,
+      label: "Thống kê & Phân tích"
     }
   ];
 
