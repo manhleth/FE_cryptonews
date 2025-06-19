@@ -18,6 +18,7 @@ interface AuthContextType {
   token: string | null;
   login: (token: string, userData: User) => void;
   logout: () => void;
+  refreshUser: () => Promise<void>; // ✅ Thêm refreshUser function
   loading: boolean;
 }
 
@@ -96,11 +97,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
+  // ✅ Thêm refreshUser function
+  const refreshUser = async () => {
+    try {
+      if (!token) {
+        console.warn('No token available for refreshing user');
+        return;
+      }
+
+      const response = await fetch('http://localhost:5000/api/User/GetUserInfor', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.statusCode === 1 && data.data) {
+        const updatedUser = data.data;
+        
+        // Cập nhật state
+        setUser(updatedUser);
+        
+        // Cập nhật localStorage
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        console.log('User data refreshed successfully');
+      } else {
+        throw new Error(data.message || 'Failed to fetch user data');
+      }
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+      
+      // Nếu token không hợp lệ, logout user
+      if (error instanceof Error && error.message.includes('401')) {
+        console.warn('Token expired, logging out user');
+        logout();
+      }
+      
+      // Throw error để component có thể handle
+      throw error;
+    }
+  };
+
   const value = {
     user,
     token,
     login,
     logout,
+    refreshUser, // ✅ Export refreshUser
     loading,
   };
 

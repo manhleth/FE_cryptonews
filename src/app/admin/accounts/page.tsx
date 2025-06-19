@@ -34,13 +34,43 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>('id');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [isClient, setIsClient] = useState(false);
   
   const { toast } = useToast();
   const { token } = useAuth();
- const valueToken = typeof window !== 'undefined' ? localStorage.getItem("tokenAdmin") : null;
+
+  // Ensure we're on client side before accessing localStorage
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  const getToken = () => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem("tokenAdmin");
+    }
+    return null;
+  };
+
+  // Check if token is expired and handle refresh/redirect
+  const handleTokenError = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem("tokenAdmin");
+      setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+      // Optionally redirect to login page
+      // window.location.href = '/login';
+    }
+  };
 
   // Fetch users
   const fetchUsers = async () => {
+    if (!isClient) return;
+    
+    const valueToken = getToken();
+    if (!valueToken) {
+      setError("Token không tồn tại. Vui lòng đăng nhập lại.");
+      return;
+    }
+
     try {
       const response = await fetch("http://localhost:5000/api/User/GetAllUserByAdmin", {
         headers: {
@@ -49,7 +79,14 @@ export default function UsersPage() {
         },
       });
       
-      if (!response.ok) throw new Error("Lỗi khi lấy danh sách người dùng");
+      if (response.status === 401) {
+        handleTokenError();
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Lỗi khi lấy danh sách người dùng: ${response.status} ${response.statusText}`);
+      }
       
       const result = await response.json();
       if (result.statusCode !== 1 || !result.data) throw new Error("Lỗi dữ liệu từ API");
@@ -75,13 +112,26 @@ export default function UsersPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("Bạn có chắc muốn xóa tài khoản này?")) return;
     
+    const valueToken = getToken();
+    if (!valueToken) {
+      setError("Token không tồn tại. Vui lòng đăng nhập lại.");
+      return;
+    }
+    
     try {
       const response = await fetch(`http://localhost:5000/api/User/DeleUserByAdmin?userID=${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${valueToken}` },
       });
       
-      if (!response.ok) throw new Error("Lỗi khi xóa người dùng");
+      if (response.status === 401) {
+        handleTokenError();
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Lỗi khi xóa người dùng: ${response.status} ${response.statusText}`);
+      }
       
       setUsers(users.filter((user) => user.id !== id));
       toast({ title: "Success", description: "User deleted successfully", duration: 3000 });
@@ -95,6 +145,12 @@ export default function UsersPage() {
   const handleUpdateRole = async () => {
     if (!editingUser) return;
 
+    const valueToken = getToken();
+    if (!valueToken) {
+      setError("Token không tồn tại. Vui lòng đăng nhập lại.");
+      return;
+    }
+
     const roleChange = newRole === "admin" ? 1 : 0;
     const url = `http://localhost:5000/api/User/SetAdminRole?UserID=${editingUser.id}&RoleChange=${roleChange}`;
 
@@ -107,7 +163,14 @@ export default function UsersPage() {
         },
       });
 
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      if (response.status === 401) {
+        handleTokenError();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status} ${response.statusText}`);
+      }
 
       const result = await response.json();
       if (result.statusCode !== 1) throw new Error(result.data || "Cập nhật vai trò không thành công");
@@ -138,7 +201,11 @@ export default function UsersPage() {
   };
 
   // Effects
-  useEffect(() => { fetchUsers(); }, [valueToken]);
+  useEffect(() => {
+    if (isClient) {
+      fetchUsers();
+    }
+  }, [isClient]);
 
   useEffect(() => {
     let filtered = users.filter(user => {
@@ -174,6 +241,15 @@ export default function UsersPage() {
       {getSortIcon(field)}
     </button>
   );
+
+  // Don't render anything until we're on the client side
+  if (!isClient) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-emerald-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

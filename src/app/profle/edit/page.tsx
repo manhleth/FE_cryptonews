@@ -33,6 +33,7 @@ export default function EditProfilePage() {
   const [avatar, setAvatar] = useState("");
   const [bio, setBio] = useState("Thêm tiểu sử ngắn của bạn");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
@@ -95,16 +96,16 @@ export default function EditProfilePage() {
     setIsUploading(true);
     setImageFile(file);
     
+    // Create temporary preview
+    setPreviewUrl(URL.createObjectURL(file));
+    
     try {
       // Create FormData for file upload
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("image", file);
       
-      const uploadResponse = await fetch("http://localhost:5000/api/File/Upload", {
+      const uploadResponse = await fetch("/api/upload", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
         body: formData,
       });
       
@@ -115,10 +116,10 @@ export default function EditProfilePage() {
       const uploadData = await uploadResponse.json();
       console.log("Upload response:", uploadData);
       
-      if (uploadData.statusCode === 1 && uploadData.data) {
-        const uploadedImagePath = uploadData.data;
+      if (uploadData.success && uploadData.filePath) {
+        const uploadedImagePath = uploadData.filePath;
         
-        // Cập nhật avatar ngay lập tức
+        // Update avatar in database
         const updateData = {
           fullname: fullName,
           phoneNumber: phoneNumber,
@@ -142,12 +143,14 @@ export default function EditProfilePage() {
         const updateResult = await updateResponse.json();
         
         if (updateResult.statusCode === 1) {
-          await refreshUser();
+          // Update local state with new avatar path
           setAvatar(uploadedImagePath);
+          // Refresh user data
+          await refreshUser();
           
           toast({
-            title: "Cập nhật avatar thành công",
-            description: "Ảnh đại diện của bạn đã được thay đổi",
+            title: "Cập nhật thành công",
+            description: "Avatar của bạn đã được cập nhật",
             duration: 3000
           });
         }
@@ -160,6 +163,8 @@ export default function EditProfilePage() {
         variant: "destructive",
         duration: 3000
       });
+      // Reset preview on error
+      setPreviewUrl("");
     } finally {
       setIsUploading(false);
       setImageFile(null);
@@ -225,6 +230,16 @@ export default function EditProfilePage() {
     }
   };
 
+  // Add this useEffect for cleanup
+  useEffect(() => {
+    return () => {
+      // Cleanup preview URL when component unmounts
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -250,9 +265,9 @@ export default function EditProfilePage() {
         <div className="flex items-center justify-center">
           <div className="relative">
             <Avatar className="w-24 h-24 border-2 border-white shadow">
-              {avatar || imageFile ? (
+              {previewUrl || avatar ? (
                 <AvatarImage 
-                  src={imageFile ? URL.createObjectURL(imageFile) : avatar} 
+                  src={previewUrl || avatar} 
                   alt={fullName || "Avatar"} 
                 />
               ) : (

@@ -81,16 +81,25 @@ export const HeaderCrypto = () => {
   // USER MANAGEMENT FUNCTIONS
   // ------------------------------------
   
-  // Update user from session storage
-  const updateUserFromSession = () => {
-    const storedUser = sessionStorage.getItem("user");
-    setUser(storedUser ? JSON.parse(storedUser) : null);
-  };
+  // Update user from auth context and session storage
+  useEffect(() => {
+    // Ưu tiên authUser từ AuthContext, fallback về sessionStorage
+    if (authUser) {
+      setUser(authUser);
+    } else {
+      const storedUser = sessionStorage.getItem("user");
+      setUser(storedUser ? JSON.parse(storedUser) : null);
+    }
+  }, [authUser]);
 
   // Listen for user session changes
   useEffect(() => {
-    // Initial user update
-    updateUserFromSession();
+    const updateUserFromSession = () => {
+      const storedUser = sessionStorage.getItem("user");
+      if (!authUser) {
+        setUser(storedUser ? JSON.parse(storedUser) : null);
+      }
+    };
 
     // Listen for storage changes (cross-tab)
     window.addEventListener("storage", updateUserFromSession);
@@ -103,7 +112,15 @@ export const HeaderCrypto = () => {
       window.removeEventListener("storage", updateUserFromSession);
       window.removeEventListener("storageChange", updateUserFromSession);
     };
-  }, []);
+  }, [authUser]);
+
+  // ------------------------------------
+  // CHECK USER ROLE
+  // ------------------------------------
+  
+  // Kiểm tra user có phải admin không
+  const isAdmin = user?.roleId === 1;
+  const isUser = user?.roleId === 0;
 
   // ------------------------------------
   // CATEGORIES MANAGEMENT
@@ -237,10 +254,9 @@ export const HeaderCrypto = () => {
   };
 
   // Navigate directly to admin panel
-    const handleAdmin = () => {
-  // Since the user is already authenticated as admin, go directly to admin dashboard
+  const handleAdmin = () => {
     router.push('/admin/accounts');
-};
+  };
 
   // ------------------------------------
   // AUTHENTICATION HANDLERS
@@ -347,6 +363,18 @@ export const HeaderCrypto = () => {
                 Watchlist
               </Link>
             )}
+
+            {/* Phân tích Link - chỉ hiển thị cho admin */}
+            {isAdmin && (
+              <Link 
+                href="/analytics"
+                className={`text-gray-600 hover:text-gray-900 pb-1 flex items-center gap-1 ${
+                  pathname === '/analytics' ? 'border-b border-gray-900' : ''
+                }`}
+              >
+                Phân tích
+              </Link>
+            )}
             
             {/* Categories Navigation */}
             {loading ? (
@@ -380,39 +408,61 @@ export const HeaderCrypto = () => {
               /* User is logged in - Show avatar dropdown */
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Avatar className="cursor-pointer">
-                    <AvatarImage src={user.avatar || "/default-avatar.png"} alt={user.fullname} />
-                    <AvatarFallback>{user.fullname?.charAt(0) || "U"}</AvatarFallback>
-                  </Avatar>
+                  <div className="flex items-center cursor-pointer hover:opacity-80 transition-opacity">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={user.avatar || "/default-avatar.png"} alt={user.fullname} />
+                      <AvatarFallback className="bg-emerald-100 text-emerald-700">
+                        {user.fullname?.charAt(0)?.toUpperCase() || user.username?.charAt(0)?.toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56">
+                <DropdownMenuContent className="w-56" align="end">
                   {/* User Info */}
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user.fullname}</p>
-                      <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                      <p className="text-sm font-medium leading-none">
+                        {user.fullname || user.username}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {user.email}
+                      </p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                          isAdmin 
+                            ? 'bg-amber-100 text-amber-800' 
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          {isAdmin ? 'Quản trị viên' : 'Thành viên'}
+                        </span>
+                      </div>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   
                   {/* User Actions */}
-
                   <DropdownMenuItem onClick={() => router.push("/profle/edit")}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Chỉnh sửa thông tin
                   </DropdownMenuItem>
+                  
                   <DropdownMenuItem onClick={() => router.push("/profle/saved")}>
                     <Bookmark className="mr-2 h-4 w-4" />
                     Bài viết đã lưu
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push("/profle/contributor")}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Bài viết của tôi
-                  </DropdownMenuItem>
+
+                  {/* Bài viết của tôi - CHỈ HIỂN THỊ CHO ADMIN */}
+                  {isAdmin && (
+                    <DropdownMenuItem onClick={() => router.push("/profle/contributor")}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      Bài viết của tôi
+                    </DropdownMenuItem>
+                  )}
+                  
                   <DropdownMenuSeparator />
                   
                   {/* Admin Panel - chỉ hiển thị nếu là admin (roleId === 1) */}
-                  {user.roleId === 1 && (
+                  {isAdmin && (
                     <>
                       <DropdownMenuItem onClick={handleAdmin}>
                         <Shield className="mr-2 h-4 w-4" />

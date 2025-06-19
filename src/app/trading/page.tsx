@@ -79,11 +79,12 @@ declare global {
 }
 
 export default function TradingPage() {
+  // 1. Context hooks first
   const { user, token } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
-  // ALL STATE HOOKS - MUST BE AT TOP AND UNCONDITIONAL
+  // 2. All useState hooks
   const [walletState, setWalletState] = useState<WalletState>({
     isConnected: false,
     address: '',
@@ -91,7 +92,6 @@ export default function TradingPage() {
     wethBalance: '0',
     chainId: 0
   });
-
   const [recipientAddress, setRecipientAddress] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [swapAmount, setSwapAmount] = useState('');
@@ -101,9 +101,10 @@ export default function TradingPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTxs, setLoadingTxs] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'send' | 'swap' | 'receive' | 'history'>('send'); // Changed default to 'send'
+  const [activeTab, setActiveTab] = useState<'send' | 'swap' | 'receive' | 'history'>('send');
 
-  // Redirect if not logged in
+  // 3. All useEffect hooks
+  // Auth check effect
   useEffect(() => {
     if (!user) {
       toast({
@@ -116,14 +117,13 @@ export default function TradingPage() {
     }
   }, [user, router, toast]);
 
-  // Load wallet state from localStorage on mount
+  // Load wallet state effect
   useEffect(() => {
     const savedWalletState = localStorage.getItem('walletState');
     if (savedWalletState) {
       try {
         const parsedState = JSON.parse(savedWalletState);
         if (parsedState.isConnected && parsedState.address) {
-          // Verify the wallet is still connected
           checkWalletConnection(parsedState.address);
         }
       } catch (error) {
@@ -133,7 +133,7 @@ export default function TradingPage() {
     }
   }, []);
 
-  // Save wallet state to localStorage whenever it changes
+  // Save wallet state effect
   useEffect(() => {
     if (walletState.isConnected) {
       localStorage.setItem('walletState', JSON.stringify(walletState));
@@ -142,17 +142,49 @@ export default function TradingPage() {
     }
   }, [walletState]);
 
-  // Show loading while checking auth - MOVED AFTER ALL HOOKS
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang kiểm tra đăng nhập...</p>
-        </div>
-      </div>
-    );
-  }
+  // MetaMask event listeners effect
+  useEffect(() => {
+    if (isMetaMaskInstalled()) {
+      const handleAccountsChanged = (accounts: string[]) => {
+        if (accounts.length === 0) {
+          disconnectWallet();
+        } else if (accounts[0] !== walletState.address) {
+          connectWallet();
+        }
+      };
+
+      const handleChainChanged = (chainId: string) => {
+        const newChainId = parseInt(chainId, 16);
+        if (newChainId !== SEPOLIA_CHAIN_ID && walletState.isConnected) {
+          switchToSepolia();
+        }
+      };
+
+      window.ethereum?.on('accountsChanged', handleAccountsChanged);
+      window.ethereum?.on('chainChanged', handleChainChanged);
+
+      return () => {
+        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum?.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+  }, [walletState.address, walletState.isConnected]);
+
+  // QR Code generation effect
+  useEffect(() => {
+    if (walletState.address) {
+      QRCode.toDataURL(walletState.address, {
+        width: 192,
+        margin: 2,
+        color: {
+          dark: '#059669',
+          light: '#FFFFFF'
+        }
+      })
+        .then(url => setQrCodeUrl(url))
+        .catch(err => console.error('QR Code generation error:', err));
+    }
+  }, [walletState.address]);
 
   // Check if MetaMask is installed
   const isMetaMaskInstalled = () => {
@@ -868,39 +900,6 @@ export default function TradingPage() {
       duration: 3000
     });
   };
-
-  // Listen for account changes
-  useEffect(() => {
-    if (isMetaMaskInstalled()) {
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // User disconnected their wallet
-          disconnectWallet();
-        } else if (accounts[0] !== walletState.address) {
-          // User switched accounts
-          connectWallet();
-        }
-      };
-
-      const handleChainChanged = (chainId: string) => {
-        const newChainId = parseInt(chainId, 16);
-        if (newChainId !== SEPOLIA_CHAIN_ID && walletState.isConnected) {
-          switchToSepolia();
-        }
-      };
-
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-      window.ethereum.on('chainChanged', handleChainChanged);
-
-      // Cleanup
-      return () => {
-        if (window.ethereum) {
-          window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-          window.ethereum.removeListener('chainChanged', handleChainChanged);
-        }
-      };
-    }
-  }, [walletState.address, walletState.isConnected]);
 
   // Generate QR code when wallet address changes
   useEffect(() => {
