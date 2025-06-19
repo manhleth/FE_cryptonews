@@ -6,33 +6,25 @@ import {
   Search, 
   Filter, 
   Trash2, 
-  Eye, 
-  EyeOff,
   User,
   Calendar,
-  MoreVertical,
   Check,
-  X,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 type Comment = {
-  id: number;
-  author: string;
+  commentId: number;
+  userId: number;
   content: string;
-  approved: boolean;
-  createdAt?: string;
+  userFullName: string;
+  userAvartar: string;
+  newsId: number;
   newsTitle?: string;
-  avatar?: string;
+  createdDate: string;
 };
 
-type FilterType = 'all' | 'approved' | 'pending';
+type FilterType = 'all' | 'recent' | 'older';
 
 export default function CommentsPage() {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -46,7 +38,7 @@ export default function CommentsPage() {
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedComments, setSelectedComments] = useState<number[]>([]);
   
-  // Lấy token (nếu cần)
+  // Lấy token
   const valueToken = localStorage.getItem("tokenAdmin");
 
   // Hàm lấy danh sách comment từ API
@@ -59,28 +51,102 @@ export default function CommentsPage() {
           "Authorization": `Bearer ${valueToken}`,
         },
       });
+      
+      console.log("API Response status:", response.status);
+      
       if (!response.ok) {
-        throw new Error("Lỗi khi lấy danh sách bình luận");
+        const errorText = await response.text();
+        console.error("API Error:", errorText);
+        throw new Error(`Lỗi API: ${response.status} - ${errorText}`);
       }
+      
       const result = await response.json();
-      // Giả sử API trả về dạng { statusCode: 1, data: [...] }
-      if (result.statusCode !== 1 || !result.data) {
-        throw new Error("Lỗi dữ liệu từ API");
+      console.log("Raw Comment API Response:", result);
+      
+      // Dựa vào CommentController, API sẽ trả về ResponseData { Data: result, StatusCode: 1 }
+      let commentData = [];
+      if (result.data) {
+        commentData = result.data;
+      } else if (result.Data) {
+        commentData = result.Data;
+      } else if (Array.isArray(result)) {
+        // Trường hợp trả về trực tiếp array
+        commentData = result;
       }
-      // Nếu API trả về key khác, hãy chỉnh sửa phần mapping này
-      const mappedComments: Comment[] = result.data.map((item: any) => ({
-        id: item.commentId, // Giả sử API trả về commentId
-        author: item.author || item.userFullName || "",
-        content: item.content || "",
-        approved: item.approved || false,
-        createdAt: item.createdAt || "",
-        newsTitle: item.newsTitle || "",
-        avatar: item.userAvartar || "",
-      }));
-      setComments(mappedComments);
-      // Reset danh sách đã chọn sau khi load lại
+      
+      if (!Array.isArray(commentData)) {
+        console.error("Unexpected API response structure:", result);
+        throw new Error("Dữ liệu API không đúng định dạng");
+      }
+
+      console.log("Comment data array:", commentData);
+      if (commentData.length > 0) {
+        console.log("First comment structure:", commentData[0]);
+      }
+
+      // Lấy danh sách tất cả news để map với comment
+      const newsResponse = await fetch("http://localhost:5000/api/News/GetAllNewAdmin", {
+        headers: {
+          "Authorization": `Bearer ${valueToken}`,
+        },
+      });
+      
+      let allNews = [];
+      if (newsResponse.ok) {
+        const newsResult = await newsResponse.json();
+        console.log("All News API Response:", newsResult);
+        if (newsResult.data) {
+          allNews = newsResult.data;
+        } else if (newsResult.Data) {
+          allNews = newsResult.Data;
+        } else if (Array.isArray(newsResult)) {
+          allNews = newsResult;
+        }
+      }
+
+      // Map comments với thông tin từ news
+      const commentsWithNewsInfo = commentData.map((comment: any) => {
+        // Dựa vào ListCommentResponseDto structure sau khi update:
+        // CommentId, UserId, Content, UserFullName, UserAvartar, NewsId, CreatedDate
+        const commentId = comment.commentId || comment.CommentId;
+        const userId = comment.userId || comment.UserId;
+        const content = comment.content || comment.Content;
+        const userFullName = comment.userFullName || comment.UserFullName;
+        const userAvatar = comment.userAvartar || comment.UserAvartar;
+        const newsId = comment.newsId || comment.NewsId;
+        const createdDate = comment.createdDate || comment.CreatedDate;
+
+        // Tìm news tương ứng
+        let newsTitle = "Không xác định";
+        if (newsId && allNews.length > 0) {
+          const relatedNews = allNews.find((news: any) => {
+            const newsIdToCompare = news.newsId || news.NewsId || news.id;
+            return newsIdToCompare === newsId;
+          });
+          if (relatedNews) {
+            newsTitle = relatedNews.title || relatedNews.Title || relatedNews.header || relatedNews.Header || "Không có tiêu đề";
+          }
+        }
+
+        const mappedComment = {
+          commentId: commentId,
+          userId: userId,
+          content: content || "Không có nội dung",
+          userFullName: userFullName || "Không xác định",
+          userAvartar: userAvatar || "",
+          newsId: newsId,
+          newsTitle: newsTitle,
+          createdDate: createdDate || new Date().toISOString(),
+        };
+
+        console.log("Mapped comment:", mappedComment);
+        return mappedComment;
+      });
+
+      setComments(commentsWithNewsInfo);
       setSelectedComments([]);
     } catch (err: any) {
+      console.error("Fetch comments error:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -95,20 +161,28 @@ export default function CommentsPage() {
   useEffect(() => {
     let filtered = comments;
 
-    // Filter by approval status
-    if (filterType === 'approved') {
-      filtered = filtered.filter(c => c.approved);
-    } else if (filterType === 'pending') {
-      filtered = filtered.filter(c => !c.approved);
+    // Filter by date
+    if (filterType === 'recent') {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      filtered = filtered.filter(c => new Date(c.createdDate) >= threeDaysAgo);
+    } else if (filterType === 'older') {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      filtered = filtered.filter(c => new Date(c.createdDate) < threeDaysAgo);
     }
 
     // Search filter
     if (searchTerm) {
       filtered = filtered.filter(c => 
         c.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.author.toLowerCase().includes(searchTerm.toLowerCase())
+        c.userFullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.newsTitle && c.newsTitle.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
+
+    // Sort by createdDate descending (newest first)
+    filtered.sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
 
     setFilteredComments(filtered);
   }, [comments, filterType, searchTerm]);
@@ -139,33 +213,8 @@ export default function CommentsPage() {
         throw new Error("Lỗi khi xóa bình luận");
       }
       
-      setComments(comments.filter((c) => c.id !== id));
+      setComments(comments.filter((c) => c.commentId !== id));
       setSuccess("Bình luận đã được xóa thành công!");
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleApproveToggle = async (id: number) => {
-    const comment = comments.find(c => c.id === id);
-    if (!comment) return;
-
-    try {
-      // Giả sử có API endpoint để toggle approval
-      // const response = await fetch(`http://localhost:5000/api/Comment/ToggleApproval?commentID=${id}`, {
-      //   method: "POST",
-      //   headers: {
-      //     "Authorization": `Bearer ${valueToken}`,
-      //   },
-      // });
-
-      // Tạm thời update local state
-      setComments(
-        comments.map((c) =>
-          c.id === id ? { ...c, approved: !c.approved } : c
-        )
-      );
-      setSuccess(`Bình luận đã được ${!comment.approved ? 'duyệt' : 'bỏ duyệt'}!`);
     } catch (err: any) {
       setError(err.message);
     }
@@ -183,7 +232,7 @@ export default function CommentsPage() {
   // Xử lý chọn/bỏ chọn tất cả
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const allIds = filteredComments.map((comment) => comment.id);
+      const allIds = filteredComments.map((comment) => comment.commentId);
       setSelectedComments(allIds);
     } else {
       setSelectedComments([]);
@@ -199,7 +248,6 @@ export default function CommentsPage() {
     if (!confirm("Bạn có chắc muốn xóa những bình luận đã chọn?")) return;
 
     try {
-      // Xóa từng comment đã chọn (thực hiện đồng thời với Promise.all)
       await Promise.all(
         selectedComments.map((id) =>
           fetch(`http://localhost:5000/api/Comment/DeleteCommentByAdmin?commentID=${id}`, {
@@ -210,7 +258,6 @@ export default function CommentsPage() {
           })
         )
       );
-      // Sau khi xoá, load lại danh sách comment
       fetchComments();
       setSuccess(`Đã xóa ${selectedComments.length} bình luận thành công!`);
     } catch (err: any) {
@@ -232,22 +279,9 @@ export default function CommentsPage() {
     });
   };
 
-  const getApprovalBadge = (approved: boolean) => {
-    if (approved) {
-      return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
-          <Check className="w-3 h-3 mr-1" />
-          Đã duyệt
-        </span>
-      );
-    } else {
-      return (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-          <AlertCircle className="w-3 h-3 mr-1" />
-          Chờ duyệt
-        </span>
-      );
-    }
+  const truncateText = (text: string, maxLength: number = 100) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + "...";
   };
 
   if (loading) {
@@ -270,7 +304,7 @@ export default function CommentsPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Quản lý bình luận</h1>
-              <p className="text-gray-600">Duyệt và quản lý bình luận từ người dùng</p>
+              <p className="text-gray-600">Xem và xóa bình luận từ người dùng</p>
             </div>
           </div>
           <div className="text-right">
@@ -303,7 +337,7 @@ export default function CommentsPage() {
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Tìm kiếm bình luận..."
+                placeholder="Tìm kiếm bình luận, tác giả hoặc bài viết..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -317,8 +351,8 @@ export default function CommentsPage() {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">Tất cả</option>
-                <option value="approved">Đã duyệt</option>
-                <option value="pending">Chờ duyệt</option>
+                <option value="recent">3 ngày gần đây</option>
+                <option value="older">Cũ hơn 3 ngày</option>
               </select>
             </div>
           </div>
@@ -355,10 +389,10 @@ export default function CommentsPage() {
                   Tác giả
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nội dung
+                  Nội dung bình luận
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Trạng thái
+                  Bài viết
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ngày tạo
@@ -370,22 +404,22 @@ export default function CommentsPage() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredComments.map((comment) => (
-                <tr key={comment.id} className="hover:bg-gray-50">
+                <tr key={comment.commentId} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <input
                       type="checkbox"
-                      checked={selectedComments.includes(comment.id)}
-                      onChange={(e) => handleSelectChange(comment.id, e.target.checked)}
+                      checked={selectedComments.includes(comment.commentId)}
+                      onChange={(e) => handleSelectChange(comment.commentId, e.target.checked)}
                       className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                     />
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        {comment.avatar ? (
+                        {comment.userAvartar ? (
                           <img 
-                            src={comment.avatar} 
-                            alt={comment.author} 
+                            src={comment.userAvartar} 
+                            alt={comment.userFullName} 
                             className="w-8 h-8 rounded-full object-cover"
                           />
                         ) : (
@@ -393,61 +427,46 @@ export default function CommentsPage() {
                         )}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{comment.author}</p>
-                        <p className="text-xs text-gray-500">#{comment.id}</p>
+                        <p className="text-sm font-medium text-gray-900">{comment.userFullName}</p>
+                        <p className="text-xs text-gray-500">ID: {comment.userId}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="max-w-md">
-                      <p className="text-sm text-gray-900 line-clamp-3">{comment.content}</p>
-                      {comment.newsTitle && (
-                        <p className="text-xs text-gray-500 mt-1">Bài viết: {comment.newsTitle}</p>
-                      )}
+                    <div className="max-w-sm">
+                      <p className="text-sm text-gray-900" title={comment.content}>
+                        {truncateText(comment.content, 150)}
+                      </p>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    {getApprovalBadge(comment.approved)}
+                    <div className="max-w-xs">
+                      <div className="flex items-start space-x-2">
+                        <FileText className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm text-gray-900 font-medium" title={comment.newsTitle}>
+                            {truncateText(comment.newsTitle || "Không xác định", 60)}
+                          </p>
+                          <p className="text-xs text-gray-500">ID: {comment.newsId}</p>
+                        </div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center text-sm text-gray-600">
                       <Calendar className="w-4 h-4 mr-1" />
-                      {formatDate(comment.createdAt || "")}
+                      {formatDate(comment.createdDate)}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="inline-flex items-center justify-center w-8 h-8 text-gray-400 bg-transparent border border-transparent rounded-lg hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                          onClick={() => handleApproveToggle(comment.id)}
-                          className="flex items-center space-x-2"
-                        >
-                          {comment.approved ? (
-                            <>
-                              <EyeOff className="w-4 h-4" />
-                              <span>Bỏ duyệt</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-4 h-4" />
-                              <span>Duyệt bình luận</span>
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDelete(comment.id)}
-                          className="flex items-center space-x-2 text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Xóa bình luận</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <button
+                      onClick={() => handleDelete(comment.commentId)}
+                      className="inline-flex items-center px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
+                      title="Xóa bình luận"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Xóa
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -473,7 +492,7 @@ export default function CommentsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -488,26 +507,13 @@ export default function CommentsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Đã duyệt</p>
+              <p className="text-sm text-gray-600">Hiển thị</p>
               <p className="text-2xl font-bold text-green-600">
-                {comments.filter(c => c.approved).length}
+                {filteredComments.length}
               </p>
             </div>
             <div className="p-3 bg-green-100 rounded-lg">
               <Check className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Chờ duyệt</p>
-              <p className="text-2xl font-bold text-yellow-600">
-                {comments.filter(c => !c.approved).length}
-              </p>
-            </div>
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <AlertCircle className="w-6 h-6 text-yellow-600" />
             </div>
           </div>
         </div>

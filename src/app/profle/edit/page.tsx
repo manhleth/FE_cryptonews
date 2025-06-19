@@ -152,7 +152,7 @@ export default function EditProfilePage() {
             title: "Cập nhật thành công",
             description: "Avatar của bạn đã được cập nhật",
             duration: 3000
-          });
+          }); 
         }
       }
     } catch (error: any) {

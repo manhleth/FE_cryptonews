@@ -75,16 +75,38 @@ export default function Home() {
   const calculateTimeAgo = (createdDate: string | undefined): string => {
     if (!createdDate) return "Gần đây";
     
-    const created = new Date(createdDate);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return `${diffInSeconds} giây trước`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
-    if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)} tháng trước`;
-    return `${Math.floor(diffInSeconds / 31536000)} năm trước`;
+    try {
+      const created = new Date(createdDate);
+      const now = new Date();
+      
+      // Kiểm tra ngày có hợp lệ không
+      if (isNaN(created.getTime())) {
+        console.log("Invalid date:", createdDate);
+        return "Gần đây";
+      }
+      
+      const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
+      
+      console.log("Date calculation:", {
+        createdDate,
+        created: created.toISOString(),
+        now: now.toISOString(),
+        diffInSeconds
+      });
+      
+      // Nếu là thời gian tương lai (diff âm), trả về "vừa xong"
+      if (diffInSeconds < 0) return "vừa xong";
+      
+      if (diffInSeconds < 60) return `${diffInSeconds} giây trước`;
+      if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
+      if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
+      if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+      if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)} tháng trước`;
+      return `${Math.floor(diffInSeconds / 31536000)} năm trước`;
+    } catch (error) {
+      console.error("Error calculating time ago:", error, createdDate);
+      return "Gần đây";
+    }
   };
 
   useEffect(() => {
@@ -210,60 +232,62 @@ export default function Home() {
             };
           });
         
-        // Fetch các section khác (có categoryId)
+        // Fetch các section khác bằng cách filter từ allNews (sử dụng cùng API GetNewest)
         const fetchPromises = SECTIONS_CONFIG
           .filter(section => section.id !== 'latest' && section.id !== 'featured' && section.categoryId)
           .map(async (section) => {
             try {
-              const response = await fetch(
-                `http://localhost:5000/api/News/GetNewsByCategoryTop?category=${section.categoryId}`
-              );
+              console.log(`Filtering allNews for ${section.id} with categoryId: ${section.categoryId}`);
               
-              console.log(`${section.id} response status:`, response.status);
+              // Filter từ allNews đã fetch trước đó thay vì gọi API mới
+              // Chờ allNews được set trước
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Sử dụng dữ liệu từ GetNewest và filter theo categoryId
+              const response = await fetch(`http://localhost:5000/api/News/GetNewest`);
               
               if (!response.ok) {
-                console.error(`${section.id} response not OK:`, response.status, response.statusText);
                 throw new Error(`HTTP error! status: ${response.status}`);
               }
               
-              const text = await response.text();
-              console.log(`${section.id} raw response:`, text.substring(0, 200) + "...");
+              const data = await response.json();
               
-              try {
-                const data = JSON.parse(text);
-                console.log(`API Response for ${section.id}:`, data); // Debug log
+              if (data.statusCode === 1) {
+                // Filter theo categoryId và map dữ liệu giống như Latest News
+                const filteredNews = data.data
+                  ?.filter((item: any) => item.categoryId === section.categoryId)
+                  ?.slice(0, 10) // Lấy 10 bài mới nhất của category
+                  ?.map((item: any) => {
+                    console.log(`Filtered item for ${section.id}:`, item);
+                    return {
+                      newsID: item.newsId, // Giống như Latest News
+                      header: item.header,
+                      title: item.title,
+                      content: item.content,
+                      imagesLink: item.imagesLink,
+                      userName: item.userName,
+                      userAvartar: item.avatar, // Giống như Latest News
+                      timeReading: item.timeReading || 5,
+                      categoryId: item.categoryId,
+                      childrenCategoryID: item.childrenCategoryId,
+                      createdDate: item.createdDate,
+                      // SỬA: Sử dụng cùng cách tính như Latest News
+                      timeAgo: calculateTimeAgo(item.createdDate)
+                    };
+                  }) || [];
                 
-                // Map dữ liệu từ API với các trường đúng
-                const newsWithTimeAgo = data.statusCode === 1 
-                  ? data.data?.map((item: any) => {
-                      console.log(`Individual item for ${section.id}:`, item); // Debug log
-                      return {
-                        newsID: item.newsID, // API trả về newsID với chữ D viết hoa
-                        header: item.header,
-                        title: item.title,
-                        content: item.title, // Sử dụng title làm content tạm thời
-                        imagesLink: item.imagesLink,
-                        userName: item.userName, // API trả về userName
-                        userAvartar: item.userAvartar, // API trả về userAvartar
-                        timeReading: parseInt(item.timeReading) || 5,
-                        categoryId: section.categoryId,
-                        timeAgo: item.timeAgo || calculateTimeAgo(item.createdDate),
-                        createdDate: item.createdDate
-                      };
-                    }) || []
-                  : [];
-                
-                console.log(`Mapped data for ${section.id}:`, newsWithTimeAgo); // Debug log
+                console.log(`Filtered and mapped data for ${section.id}:`, filteredNews);
                 
                 return {
                   sectionId: section.id,
-                  data: newsWithTimeAgo
+                  data: filteredNews
                 };
-              } catch (parseError) {
-                console.error(`Error parsing ${section.id} JSON:`, parseError);
-                console.error(`Raw response that failed to parse for ${section.id}:`, text);
-                throw parseError;
               }
+              
+              return {
+                sectionId: section.id,
+                data: []
+              };
             } catch (err) {
               console.error(`Error fetching data for section ${section.id}:`, err);
               return {

@@ -20,6 +20,7 @@ interface NewsData {
   categoryId: number;
   imagesLink: string;
   createdDate?: string;
+  userAvartar?: string; 
 }
 
 interface Comment {
@@ -54,6 +55,103 @@ export default function NewsDetailPage() {
   const [newestPosts, setNewestPosts] = useState<NewsData[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [loadingNewest, setLoadingNewest] = useState(false);
+
+  // Format content for display - SAME AS PREVIEW
+  const formatContentForDisplay = (text: string) => {
+    if (!text) return "";
+    
+    return text.split('\n').map((line, index) => {
+      // Headers
+      if (line.startsWith('# ')) {
+        return <h1 key={index} className="text-3xl font-bold mb-6 text-gray-900 mt-8 first:mt-0">{line.substring(2)}</h1>;
+      }
+      if (line.startsWith('## ')) {
+        return <h2 key={index} className="text-2xl font-semibold mb-4 text-gray-800 mt-6 first:mt-0">{line.substring(3)}</h2>;
+      }
+      if (line.startsWith('### ')) {
+        return <h3 key={index} className="text-xl font-medium mb-3 text-gray-700 mt-5 first:mt-0">{line.substring(4)}</h3>;
+      }
+      
+      // Blockquotes
+      if (line.startsWith('> ')) {
+        return (
+          <blockquote key={index} className="border-l-4 border-emerald-400 pl-6 py-3 my-4 bg-emerald-50 italic text-gray-700 rounded-r-lg">
+            <p className="text-lg leading-relaxed">{line.substring(2)}</p>
+          </blockquote>
+        );
+      }
+      
+      // Lists
+      if (line.startsWith('• ') || line.startsWith('- ')) {
+        return (
+          <li key={index} className="ml-6 mb-2 text-gray-700 text-lg leading-relaxed list-disc">
+            {line.substring(2)}
+          </li>
+        );
+      }
+      
+      // Bold and italic text
+      let processedLine = line;
+      
+      // Bold **text**
+      processedLine = processedLine.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>');
+      
+      // Italic *text*
+      processedLine = processedLine.replace(/\*(.*?)\*/g, '<em class="italic text-gray-800">$1</em>');
+      
+      // Empty lines
+      if (line.trim() === '') {
+        return <div key={index} className="my-4" />;
+      }
+      
+      // Horizontal rules (— — — — —)
+      if (line.trim().match(/^[—\-]{3,}$/)) {
+        return <hr key={index} className="my-8 border-t-2 border-emerald-200" />;
+      }
+      
+      // Star separators (★ ★ ★ ★ ★)
+      if (line.trim().match(/^[★☆✦✧]{3,}$/)) {
+        return (
+          <div key={index} className="text-center my-8">
+            <div className="text-emerald-400 text-2xl tracking-widest">{line.trim()}</div>
+          </div>
+        );
+      }
+      
+      // Info boxes (📌 **THÔNG TIN QUAN TRỌNG:**)
+      if (line.includes('📌') && line.includes('**')) {
+        return (
+          <div key={index} className="bg-blue-50 border-l-4 border-blue-400 p-4 my-6 rounded-r-lg">
+            <p 
+              className="text-blue-800 font-medium text-lg"
+              dangerouslySetInnerHTML={{ __html: processedLine }}
+            />
+          </div>
+        );
+      }
+      
+      // Conclusion boxes (🎯 **KẾT LUẬN:**)
+      if (line.includes('🎯') && line.includes('**')) {
+        return (
+          <div key={index} className="bg-green-50 border-l-4 border-green-400 p-4 my-6 rounded-r-lg">
+            <p 
+              className="text-green-800 font-medium text-lg"
+              dangerouslySetInnerHTML={{ __html: processedLine }}
+            />
+          </div>
+        );
+      }
+      
+      // Regular paragraphs
+      return (
+        <p 
+          key={index} 
+          className="mb-4 text-gray-700 leading-relaxed text-lg"
+          dangerouslySetInnerHTML={{ __html: processedLine }}
+        />
+      );
+    });
+  };
 
   // Helper functions
   const formatTimeAgo = (date: string | Date) => {
@@ -466,6 +564,13 @@ export default function NewsDetailPage() {
                     {item.header}
                   </h1>
 
+                  {/* Title/Description */}
+                  {item.title && (
+                    <div className="p-4 bg-emerald-50 rounded-lg border-l-4 border-emerald-400 mb-6">
+                      <p className="text-emerald-800 font-medium text-lg">{item.title}</p>
+                    </div>
+                  )}
+
                   {/* Author Info */}
                   <div className="flex items-center gap-4 mb-6">
                     <img 
@@ -513,14 +618,10 @@ export default function NewsDetailPage() {
                   </div>
                 </header>
 
-                {/* Content */}
+                {/* Content with Formatting */}
                 <div className="prose prose-lg max-w-none mb-12">
-                  <div className="text-gray-700 leading-relaxed text-lg">
-                    {item.content.split('\n').map((paragraph, index) => (
-                      <p key={index} className="mb-4">
-                        {paragraph}
-                      </p>
-                    ))}
+                  <div className="text-gray-700 leading-relaxed">
+                    {formatContentForDisplay(item.content)}
                   </div>
                 </div>
 
@@ -723,17 +824,17 @@ export default function NewsDetailPage() {
                     </div>
                     
                     <div className="p-4 flex-1 flex flex-col">
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                        <img
-                          src={post.avatar || "/placeholder/20/20"}
-                          alt={post.userName}
-                          className="w-5 h-5 rounded-full"
-                        />
+                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                      <img
+                        src={post.userAvartar || post.avatar || "/placeholder/20/20.jpg"}
+                        alt={post.userName}
+                        className="w-5 h-5 rounded-full object-cover border border-gray-200"
+                        onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/placeholder/20/20.jpg";}}/>
                         <span>{post.userName}</span>
                         <span>•</span>
-                        <span>{post.timeReading} phút đọc</span>
+                        <span>{post.timeReading} </span>
                       </div>
-                      
                       <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
                         {post.header || post.title}
                       </h3>

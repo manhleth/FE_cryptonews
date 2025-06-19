@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogTrigger,
@@ -16,7 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
-import { Pencil, BookOpen, Calendar, User, FileText, Info, Plus, Loader2 } from "lucide-react";
+import { Pencil, BookOpen, Calendar, User, FileText, Info, Plus, Loader2, Bold, Italic, List, Hash, Quote, Minus, Star, ArrowRight, Type, Eye, Edit3 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -50,13 +50,13 @@ export default function ContributorPage() {
   const userId = user?.userId;
   const tokenSend = token;
   const { toast } = useToast();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Các state để lưu dữ liệu form
   const [head, setHead] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [timeReading, setTimeReading] = useState("");
-  const [footer, setFooter] = useState(""); // Đảm bảo có state footer
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedChildrenCategory, setSelectedChilrenCategory] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -68,6 +68,191 @@ export default function ContributorPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingPosts, setLoadingPosts] = useState(true);
+
+  // Preview state
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  // Formatting functions cho editor
+  const insertTextAtCursor = (textToInsert: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentText = content;
+    
+    const newText = currentText.substring(0, start) + textToInsert + currentText.substring(end);
+    setContent(newText);
+    
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+    }, 0);
+  };
+
+  const wrapSelectedText = (before: string, after: string = before) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+    const currentText = content;
+    
+    if (selectedText) {
+      const newText = currentText.substring(0, start) + before + selectedText + after + currentText.substring(end);
+      setContent(newText);
+      
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + before.length, end + before.length);
+      }, 0);
+    } else {
+      insertTextAtCursor(before + after);
+    }
+  };
+
+  // Formatting options
+  const formatOptions = [
+    {
+      label: "Tiêu đề lớn",
+      icon: Hash,
+      action: () => insertTextAtCursor("\n\n# "),
+      description: "Tạo tiêu đề chính"
+    },
+    {
+      label: "Tiêu đề phụ",
+      icon: Hash,
+      action: () => insertTextAtCursor("\n\n## "),
+      description: "Tạo tiêu đề phụ"
+    },
+    {
+      label: "Đậm",
+      icon: Bold,
+      action: () => wrapSelectedText("**"),
+      description: "Làm đậm text"
+    },
+    {
+      label: "Nghiêng",
+      icon: Italic,
+      action: () => wrapSelectedText("*"),
+      description: "Làm nghiêng text"
+    },
+    {
+      label: "Trích dẫn",
+      icon: Quote,
+      action: () => insertTextAtCursor("\n\n> "),
+      description: "Thêm trích dẫn"
+    },
+    {
+      label: "Danh sách",
+      icon: List,
+      action: () => insertTextAtCursor("\n\n• "),
+      description: "Tạo danh sách có dấu đầu dòng"
+    }
+  ];
+
+  // Special characters
+  const specialChars = [
+    { char: "—", name: "Gạch ngang dài" },
+    { char: "–", name: "Gạch ngang ngắn" },
+    { char: "•", name: "Dấu đầu dòng" },
+    { char: "→", name: "Mũi tên phải" },
+    { char: "←", name: "Mũi tên trái" },
+    { char: "★", name: "Ngôi sao đặc" },
+    { char: "☆", name: "Ngôi sao rỗng" },
+    { char: "✓", name: "Dấu check" },
+    { char: "✗", name: "Dấu X" },
+    { char: "⚡", name: "Tia chớp" },
+    { char: "🔥", name: "Lửa" },
+    { char: "💡", name: "Bóng đèn" },
+    { char: "📌", name: "Ghim" },
+    { char: "⭐", name: "Ngôi sao" },
+    { char: "🎯", name: "Mục tiêu" }
+  ];
+
+  // Quick templates
+  const templates = [
+    {
+      name: "Phân cách đơn giản",
+      content: "\n\n— — — — —\n\n"
+    },
+    {
+      name: "Phân cách với sao",
+      content: "\n\n★ ★ ★ ★ ★\n\n"
+    },
+    {
+      name: "Gạch ngang dài",
+      content: "\n\n———————————————————————————————————————\n\n"
+    },
+    {
+      name: "Khung thông tin",
+      content: "\n\n📌 **THÔNG TIN QUAN TRỌNG:**\n\n• \n• \n• \n\n"
+    },
+    {
+      name: "Kết luận",
+      content: "\n\n🎯 **KẾT LUẬN:**\n\n"
+    }
+  ];
+
+  // Format content for preview
+  const formatContentForPreview = (text: string) => {
+    if (!text) return "";
+    
+    return text.split('\n').map((line, index) => {
+      // Headers
+      if (line.startsWith('# ')) {
+        return <h1 key={index} className="text-2xl font-bold mb-4 text-gray-900">{line.substring(2)}</h1>;
+      }
+      if (line.startsWith('## ')) {
+        return <h2 key={index} className="text-xl font-semibold mb-3 text-gray-800">{line.substring(3)}</h2>;
+      }
+      if (line.startsWith('### ')) {
+        return <h3 key={index} className="text-lg font-medium mb-2 text-gray-700">{line.substring(4)}</h3>;
+      }
+      
+      // Blockquotes
+      if (line.startsWith('> ')) {
+        return (
+          <blockquote key={index} className="border-l-4 border-emerald-400 pl-4 py-2 my-3 bg-emerald-50 italic text-gray-700">
+            {line.substring(2)}
+          </blockquote>
+        );
+      }
+      
+      // Lists
+      if (line.startsWith('• ') || line.startsWith('- ')) {
+        return (
+          <li key={index} className="ml-4 mb-1 text-gray-700">
+            {line.substring(2)}
+          </li>
+        );
+      }
+      
+      // Bold and italic text
+      let processedLine = line;
+      
+      // Bold **text**
+      processedLine = processedLine.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>');
+      
+      // Italic *text*
+      processedLine = processedLine.replace(/\*(.*?)\*/g, '<em class="italic">$1</em>');
+      
+      // Empty lines
+      if (line.trim() === '') {
+        return <br key={index} className="my-2" />;
+      }
+      
+      // Regular paragraphs
+      return (
+        <p 
+          key={index} 
+          className="mb-3 text-gray-700 leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: processedLine }}
+        />
+      );
+    });
+  };
 
   // Lấy danh mục từ API khi component mount
   useEffect(() => {
@@ -156,12 +341,12 @@ export default function ContributorPage() {
     setTitle("");
     setContent("");
     setTimeReading("");
-    setFooter(""); // Reset footer
     setSelectedCategory("");
     setSelectedChilrenCategory("");
     setImageFile(null);
     setImagePreview(null);
     setImageUrl("");
+    setIsPreviewMode(false);
   };
 
   // Xử lý submit form
@@ -169,8 +354,8 @@ export default function ContributorPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Validate form - Thêm kiểm tra footer
-    if (!head.trim() || !title.trim() || !content.trim() || !timeReading || !footer.trim() || !selectedCategory || !selectedChildrenCategory) {
+    // Validate form
+    if (!head.trim() || !title.trim() || !content.trim() || !timeReading || !selectedCategory || !selectedChildrenCategory) {
       toast({
         title: "Vui lòng điền đầy đủ thông tin",
         description: "Hãy kiểm tra lại các trường bắt buộc",
@@ -223,7 +408,7 @@ export default function ContributorPage() {
     formData.append("title", title);
     formData.append("content", content);
     formData.append("timeReading", timeReading);
-    formData.append("footer", footer); // Đảm bảo footer được thêm vào
+    formData.append("footer", "");
     formData.append("categoryId", selectedCategory);
     formData.append("userId", userId!.toString());
     formData.append("childrenCategoryId", selectedChildrenCategory);
@@ -306,216 +491,412 @@ export default function ContributorPage() {
               Đăng bài viết mới
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden p-0">
-            <ScrollArea className="max-h-[calc(90vh-4rem)]">
+          <DialogContent className="sm:max-w-7xl max-h-[95vh] overflow-hidden p-0">
+            <ScrollArea className="max-h-[calc(95vh-4rem)]">
               <div className="p-6">
                 <DialogHeader className="mb-6">
-                  <DialogTitle className="text-2xl font-bold text-emerald-600 flex items-center">
-                    <Pencil className="w-5 h-5 mr-2" />
-                    Đăng bài viết mới
-                  </DialogTitle>
-                  <DialogDescription>
-                    Điền đầy đủ thông tin để Đăng bài viết mới. Các trường có dấu * là bắt buộc.
-                  </DialogDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <DialogTitle className="text-2xl font-bold text-emerald-600 flex items-center">
+                        <Pencil className="w-5 h-5 mr-2" />
+                        Đăng bài viết mới
+                      </DialogTitle>
+                      <DialogDescription>
+                        Sử dụng các công cụ formatting để tạo bài viết đẹp mắt với ký tự đặc biệt và định dạng.
+                      </DialogDescription>
+                    </div>
+                    
+                    {/* Toggle Preview/Edit */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant={!isPreviewMode ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setIsPreviewMode(false)}
+                        className="flex items-center gap-2"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        Chỉnh sửa
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={isPreviewMode ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setIsPreviewMode(true)}
+                        className="flex items-center gap-2"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Xem trước
+                      </Button>
+                    </div>
+                  </div>
                 </DialogHeader>
                 
-                {/* Form thêm bài viết */}
-                <form onSubmit={handleSubmit}>
-                  <div className="space-y-5">
-                    {/* Tiêu đề bài viết */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700" htmlFor="head">
-                        Tiêu đề bài viết <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="head"
-                        name="head"
-                        value={head}
-                        onChange={(e) => setHead(e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                        placeholder="Nhập tiêu đề bài viết"
-                      />
-                    </div>
-                    
-                    {/* Mô tả ngắn */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700" htmlFor="title">
-                        Mô tả ngắn <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="title"
-                        name="title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                        placeholder="Nhập mô tả ngắn"
-                      />
-                    </div>
-                    
-                    {/* Nội dung bài viết */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700" htmlFor="content">
-                        Nội dung <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        id="content"
-                        name="content"
-                        rows={6}
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                        placeholder="Nhập nội dung bài viết"
-                      />
-                    </div>
-                    
-                    {/* Thời gian đọc */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700" htmlFor="timeReading">
-                        Thời gian đọc (phút) <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        id="timeReading"
-                        name="timeReading"
-                        min="1"
-                        value={timeReading}
-                        onChange={(e) => setTimeReading(e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                        placeholder="Nhập thời gian đọc"
-                      />
-                    </div>
+                {/* Form và Preview */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Form Section */}
+                  <div className={`${isPreviewMode ? 'hidden lg:block' : ''}`}>
+                    <form onSubmit={handleSubmit}>
+                      <div className="space-y-5">
+                        {/* Tiêu đề bài viết */}
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700" htmlFor="head">
+                            Tiêu đề bài viết <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            id="head"
+                            name="head"
+                            value={head}
+                            onChange={(e) => setHead(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                            placeholder="Nhập tiêu đề bài viết"
+                          />
+                        </div>
+                        
+                        {/* Mô tả ngắn */}
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700" htmlFor="title">
+                            Mô tả ngắn <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            id="title"
+                            name="title"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                            placeholder="Nhập mô tả ngắn"
+                          />
+                        </div>
+                        
+                        {/* Nội dung bài viết với editor nâng cao */}
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Nội dung <span className="text-red-500">*</span>
+                          </label>
+                          
+                          {/* Toolbar */}
+                          <div className="border border-gray-300 rounded-t-lg bg-gray-50 p-3">
+                            {/* Format options */}
+                            <div className="mb-3">
+                              <h4 className="text-xs font-medium text-gray-600 mb-2 flex items-center">
+                                <Type className="w-3 h-3 mr-1" />
+                                Định dạng
+                              </h4>
+                              <div className="flex flex-wrap gap-1">
+                                {formatOptions.map((option, index) => (
+                                  <button
+                                    key={index}
+                                    type="button"
+                                    onClick={option.action}
+                                    className="flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
+                                    title={option.description}
+                                  >
+                                    <option.icon className="w-3 h-3" />
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
 
-                    {/* Footer/Kết luận */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700" htmlFor="footer">
-                        Kết luận <span className="text-red-500">*</span>
-                      </label>
-                      <textarea
-                        id="footer"
-                        name="footer"
-                        rows={3}
-                        value={footer}
-                        onChange={(e) => setFooter(e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                        placeholder="Nhập kết luận cho bài viết"
-                      />
-                    </div>
-                    
-                    {/* Danh mục */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700" htmlFor="category">
-                          Danh mục <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          id="category"
-                          name="category"
-                          value={selectedCategory}
-                          onChange={(e) => setSelectedCategory(e.target.value)}
-                          className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                        >
-                          <option value="">Chọn danh mục</option>
-                          {categories.map((cat) => (
-                            <option key={cat.categoryId} value={cat.categoryId}>
-                              {cat.categoryName}
-                            </option>
-                          ))}
-                        </select>
+                            {/* Special characters */}
+                            <div className="mb-3">
+                              <h4 className="text-xs font-medium text-gray-600 mb-2 flex items-center">
+                                <Star className="w-3 h-3 mr-1" />
+                                Ký tự đặc biệt
+                              </h4>
+                              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                                {specialChars.map((char, index) => (
+                                  <button
+                                    key={index}
+                                    type="button"
+                                    onClick={() => insertTextAtCursor(char.char)}
+                                    className="px-2 py-1 text-sm bg-white border border-gray-200 rounded hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
+                                    title={char.name}
+                                  >
+                                    {char.char}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Quick templates */}
+                            <div>
+                              <h4 className="text-xs font-medium text-gray-600 mb-2 flex items-center">
+                                <ArrowRight className="w-3 h-3 mr-1" />
+                                Mẫu có sẵn
+                              </h4>
+                              <div className="flex flex-wrap gap-1">
+                                {templates.map((template, index) => (
+                                  <button
+                                    key={index}
+                                    type="button"
+                                    onClick={() => insertTextAtCursor(template.content)}
+                                    className="px-2 py-1 text-xs bg-white border border-gray-200 rounded hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
+                                  >
+                                    {template.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Text area */}
+                          <textarea
+                            ref={textareaRef}
+                            id="content"
+                            name="content"
+                            rows={12}
+                            value={content}
+                            onChange={(e) => setContent(e.target.value)}
+                            className="w-full px-4 py-3 rounded-b-lg border border-gray-300 border-t-0 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all font-mono text-sm"
+                            placeholder="Nhập nội dung bài viết... 
+
+Bạn có thể sử dụng:
+# Tiêu đề lớn
+## Tiêu đề nhỏ
+**Text đậm**
+*Text nghiêng*
+> Trích dẫn
+• Danh sách
+— Gạch ngang
+★ Ký tự đặc biệt"
+                          />
+                        </div>
+                        
+                        {/* Thời gian đọc */}
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700" htmlFor="timeReading">
+                            Thời gian đọc (phút) <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="number"
+                            id="timeReading"
+                            name="timeReading"
+                            min="1"
+                            value={timeReading}
+                            onChange={(e) => setTimeReading(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                            placeholder="Nhập thời gian đọc"
+                          />
+                        </div>
+                        
+                        {/* Danh mục */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700" htmlFor="category">
+                              Danh mục <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              id="category"
+                              name="category"
+                              value={selectedCategory}
+                              onChange={(e) => setSelectedCategory(e.target.value)}
+                              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                            >
+                              <option value="">Chọn danh mục</option>
+                              {categories.map((cat) => (
+                                <option key={cat.categoryId} value={cat.categoryId}>
+                                  {cat.categoryName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          {/* Danh mục con */}
+                          <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-700" htmlFor="childrenCategory">
+                              Danh mục con <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              id="childrenCategory"
+                              name="childrenCategory"
+                              value={selectedChildrenCategory}
+                              onChange={(e) => setSelectedChilrenCategory(e.target.value)}
+                              className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
+                              disabled={!selectedCategory}
+                            >
+                              <option value="">Chọn danh mục con</option>
+                              {childrenCategories.map((cat) => (
+                                <option key={cat.childrenCategoryID} value={cat.childrenCategoryID}>
+                                  {cat.childrenCategoryName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        
+                        {/* Ảnh đại diện */}
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700" htmlFor="image">
+                            Ảnh bìa <span className="text-red-500">*</span>
+                          </label>
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-emerald-500 transition-all">
+                            <input
+                              type="file"
+                              id="image"
+                              name="image"
+                              accept="image/*"
+                              onChange={handleImageChange}
+                              className="hidden"
+                            />
+                            <label htmlFor="image" className="cursor-pointer block">
+                              {imagePreview ? (
+                                <div className="space-y-3">
+                                  <img
+                                    src={imagePreview}
+                                    alt="Preview"
+                                    className="max-h-40 mx-auto object-cover rounded-lg"
+                                  />
+                                  <p className="text-sm text-emerald-600">Nhấp để thay đổi ảnh</p>
+                                </div>
+                              ) : (
+                                <div className="py-4">
+                                  <Plus className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                                  <p className="text-gray-500">Nhấp để tải ảnh lên</p>
+                                  <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (tối đa 2MB)</p>
+                                </div>
+                              )}
+                            </label>
+                          </div>
+                        </div>
                       </div>
                       
-                      {/* Danh mục con */}
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700" htmlFor="childrenCategory">
-                          Danh mục con <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          id="childrenCategory"
-                          name="childrenCategory"
-                          value={selectedChildrenCategory}
-                          onChange={(e) => setSelectedChilrenCategory(e.target.value)}
-                          className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all"
-                          disabled={!selectedCategory}
+                      <div className="flex justify-end space-x-4 mt-8">
+                        <DialogClose asChild>
+                          <Button type="button" variant="outline">
+                            Hủy
+                          </Button>
+                        </DialogClose>
+                        <Button 
+                          type="submit" 
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                          disabled={isSubmitting}
                         >
-                          <option value="">Chọn danh mục con</option>
-                          {childrenCategories.map((cat) => (
-                            <option key={cat.childrenCategoryID} value={cat.childrenCategoryID}>
-                              {cat.childrenCategoryName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                    
-                    {/* Ảnh đại diện */}
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700" htmlFor="image">
-                        Ảnh bìa <span className="text-red-500">*</span>
-                      </label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-emerald-500 transition-all">
-                        <input
-                          type="file"
-                          id="image"
-                          name="image"
-                          accept="image/*"
-                          onChange={handleImageChange}
-                          className="hidden"
-                        />
-                        <label htmlFor="image" className="cursor-pointer block">
-                          {imagePreview ? (
-                            <div className="space-y-3">
-                              <img
-                                src={imagePreview}
-                                alt="Preview"
-                                className="max-h-40 mx-auto object-cover rounded-lg"
-                              />
-                              <p className="text-sm text-emerald-600">Nhấp để thay đổi ảnh</p>
-                            </div>
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Đang tạo...
+                            </>
                           ) : (
-                            <div className="py-4">
-                              <Plus className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                              <p className="text-gray-500">Nhấp để tải ảnh lên</p>
-                              <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (tối đa 2MB)</p>
+                            <>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Tạo bài viết
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Preview Section */}
+                  <div className={`${!isPreviewMode ? 'hidden lg:block' : ''} bg-white border border-gray-200 rounded-lg p-6`}>
+                    <div className="sticky top-0">
+                      <div className="mb-4 pb-4 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                          <Eye className="w-5 h-5 text-emerald-600" />
+                          Xem trước bài viết
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Đây là cách bài viết sẽ hiển thị cho người đọc
+                        </p>
+                      </div>
+
+                      {/* Preview Content */}
+                      <div className="space-y-6">
+                        {/* Header Image Preview */}
+                        {imagePreview && (
+                          <div className="aspect-video relative overflow-hidden rounded-lg">
+                            <img
+                              src={imagePreview}
+                              alt="Preview"
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                          </div>
+                        )}
+
+                        {/* Article Header */}
+                        <header className="space-y-4">
+                          {head && (
+                            <h1 className="text-3xl font-bold text-gray-900 leading-tight">
+                              {head}
+                            </h1>
+                          )}
+
+                          {/* Author Info Preview */}
+                          <div className="flex items-center gap-4">
+                            <img 
+                              src={user?.avatar || "/placeholder/48/48.jpg"} 
+                              alt={user?.fullname} 
+                              className="w-12 h-12 rounded-full border-2 border-white shadow-md" 
+                            />
+                            <div className="flex-1">
+                              <p className="font-semibold text-gray-900">{user?.fullname || user?.username}</p>
+                              <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
+                                <div className="flex items-center gap-1">
+                                  <BookOpen className="w-4 h-4" />
+                                  <span>{timeReading || "0"} phút đọc</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-4 h-4" />
+                                  <span>Hôm nay</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Title/Description */}
+                          {title && (
+                            <div className="p-4 bg-emerald-50 rounded-lg border-l-4 border-emerald-400">
+                              <p className="text-emerald-800 font-medium">{title}</p>
                             </div>
                           )}
-                        </label>
+                        </header>
+
+                        {/* Content Preview */}
+                        <div className="prose prose-lg max-w-none">
+                          <div className="text-gray-700 leading-relaxed">
+                            {content ? (
+                              <div className="space-y-4">
+                                {formatContentForPreview(content)}
+                              </div>
+                            ) : (
+                              <div className="text-center py-8 text-gray-400">
+                                <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                                <p>Nội dung bài viết sẽ hiển thị ở đây...</p>
+                                <p className="text-sm mt-1">Nhập nội dung bên trái để xem preview</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Category Preview */}
+                        <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
+                          <span className="text-sm text-gray-500">Danh mục:</span>
+                          {selectedCategory && (
+                            <Badge variant="secondary" className="bg-emerald-100 text-emerald-800">
+                              {categories.find(cat => cat.categoryId.toString() === selectedCategory)?.categoryName || "Đang chọn..."}
+                            </Badge>
+                          )}
+                          {selectedChildrenCategory && (
+                            <Badge variant="outline" className="border-emerald-200 text-emerald-700">
+                              {childrenCategories.find(cat => cat.childrenCategoryID.toString() === selectedChildrenCategory)?.childrenCategoryName || "Đang chọn..."}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="flex justify-end space-x-4 mt-8">
-                    <DialogClose asChild>
-                      <Button type="button" variant="outline">
-                        Hủy
-                      </Button>
-                    </DialogClose>
-                    <Button 
-                      type="submit" 
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Đang tạo...
-                        </>
-                      ) : (
-                        <>
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Tạo bài viết
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
+                </div>
               </div>
             </ScrollArea>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Hiển thị bài viết */}
+      {/* Hiển thị bài viết - GIỮ NGUYÊN CODE GỐC */}
       {loadingPosts ? (
         <div className="flex justify-center items-center py-16">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
@@ -583,7 +964,7 @@ export default function ContributorPage() {
                         <Avatar className="w-6 h-6">
                           <AvatarImage src={user?.avatar || "/placeholder/24/24"} alt={user?.fullname} />
                           <AvatarFallback className="bg-emerald-100 text-emerald-700">
-                            {user?.fullname.charAt(0) || "U"}
+                            {user?.fullname?.charAt(0) || "U"}
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-xs text-gray-500">Bạn</span>

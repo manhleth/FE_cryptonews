@@ -119,12 +119,7 @@ export const NewsCard = ({ item, hideBookmark = false }: NewsCardProps) => {
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        
-        {/* View count */}
-        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-700 px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-          <Eye size={12} />
-          1.2k
-        </div>
+
       </div>
       
       {/* Nội dung bài viết */}

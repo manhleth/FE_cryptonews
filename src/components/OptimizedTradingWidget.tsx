@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Star, TrendingUp, TrendingDown, Eye, EyeOff, RefreshCw, Loader2, Plus, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Eye, EyeOff, RefreshCw, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { useAuth } from "@/context/AuthContext";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
@@ -35,7 +35,6 @@ export const OptimizedTradingWidget = () => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('online');
-  const [updatingCoins, setUpdatingCoins] = useState<Set<string>>(new Set());
 
   // Memoized functions
   const formatPrice = useCallback((price: number) => {
@@ -55,10 +54,6 @@ export const OptimizedTradingWidget = () => {
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     return `${Math.floor(diff / 3600)}h ago`;
   }, []);
-
-  const isInWatchlist = useCallback((coinId: string) => {
-    return watchlist.some(item => item.coinId === coinId);
-  }, [watchlist]);
 
   // Optimized data fetching
   const fetchCoins = useCallback(async (showLoading = true) => {
@@ -115,116 +110,6 @@ export const OptimizedTradingWidget = () => {
       setWatchlist([]);
     }
   }, [user, token]);
-
-  // Optimistic watchlist updates
-  const updateWatchlistOptimistic = useCallback((coinId: string, action: 'add' | 'remove', coinData?: CoinData) => {
-    setWatchlist(prev => {
-      if (action === 'add' && coinData) {
-        const newItem: WatchlistItem = {
-          watchlistId: Date.now(),
-          userId: user!.userId,
-          coinId: coinData.id,
-          coinSymbol: coinData.symbol,
-          coinName: coinData.name,
-          coinImage: coinData.image,
-          order: prev.length + 1,
-          isActive: true,
-          createdDate: new Date().toISOString()
-        };
-        return [...prev, newItem];
-      } else if (action === 'remove') {
-        return prev.filter(item => item.coinId !== coinId);
-      }
-      return prev;
-    });
-  }, [user]);
-
-  const toggleWatchlist = useCallback(async (coin: CoinData) => {
-    if (!user || !token) {
-      toast({
-        title: "Cần đăng nhập",
-        description: "Vui lòng đăng nhập để sử dụng tính năng watchlist",
-        variant: "destructive",
-        duration: 3000
-      });
-      return;
-    }
-    
-    const isWatched = isInWatchlist(coin.id);
-    setUpdatingCoins(prev => new Set(prev).add(coin.id));
-    
-    // Optimistic update
-    updateWatchlistOptimistic(coin.id, isWatched ? 'remove' : 'add', coin);
-    
-    try {
-      if (isWatched) {
-        // Remove from watchlist
-        const response = await fetch(
-          `http://localhost:5000/api/Watchlist/RemoveFromWatchlist?userId=${user.userId}&coinId=${coin.id}`,
-          {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-        
-        if (!response.ok) throw new Error('Failed to remove from watchlist');
-        
-        toast({
-          title: "Đã xóa khỏi watchlist",
-          description: `${coin.name} đã được xóa khỏi danh sách theo dõi`,
-          duration: 2000
-        });
-      } else {
-        // Add to watchlist
-        const watchlistData = {
-          coinId: coin.id,
-          coinSymbol: coin.symbol,
-          coinName: coin.name,
-          coinImage: coin.image,
-          order: watchlist.length + 1
-        };
-        
-        const response = await fetch(
-          `http://localhost:5000/api/Watchlist/AddToWatchlist?userId=${user.userId}`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(watchlistData)
-          }
-        );
-        
-        if (!response.ok) throw new Error('Failed to add to watchlist');
-        
-        toast({
-          title: "Đã thêm vào watchlist",
-          description: `${coin.name} đã được thêm vào danh sách theo dõi`,
-          duration: 2000
-        });
-      }
-    } catch (error) {
-      console.error('Error toggling watchlist:', error);
-      // Revert optimistic update
-      updateWatchlistOptimistic(coin.id, isWatched ? 'add' : 'remove', coin);
-      toast({
-        title: "Lỗi",
-        description: "Không thể cập nhật watchlist. Vui lòng thử lại.",
-        variant: "destructive",
-        duration: 3000
-      });
-    } finally {
-      setUpdatingCoins(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(coin.id);
-        return newSet;
-      });
-    }
-  }, [user, token, watchlist.length, isInWatchlist, updateWatchlistOptimistic, toast]);
 
   // Manual refresh with debouncing
   const handleManualRefresh = useCallback(() => {
@@ -351,44 +236,15 @@ export const OptimizedTradingWidget = () => {
           ) : (
             <div className="max-h-96 overflow-y-auto">
               {displayedCoins.map((coin) => {
-                const isWatched = isInWatchlist(coin.id);
-                const isUpdating = updatingCoins.has(coin.id);
-                
                 return (
                   <Link 
                     key={coin.id}
                     href={`/coin/${coin.id}`}
                     className="block"
                   >
-                    <div
-                      className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors ${
-                        isWatched ? 'bg-emerald-50' : ''
-                      }`}
-                    >
+                    <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors">
                       <div className="flex items-center space-x-3">
-                        <div className="flex items-center space-x-2 w-10">
-                          {user ? (
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                toggleWatchlist(coin);
-                              }}
-                              disabled={isUpdating}
-                              className="p-1 hover:bg-gray-100 rounded transition-colors"
-                            >
-                              {isUpdating ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                              ) : isWatched ? (
-                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                              ) : (
-                                <Star className="h-4 w-4 text-gray-400 hover:text-yellow-400" />
-                              )}
-                            </button>
-                          ) : (
-                            <span className="text-sm text-gray-500">#{coin.market_cap_rank}</span>
-                          )}
-                        </div>
+                        <span className="text-sm text-gray-500 w-8">#{coin.market_cap_rank}</span>
                         <div className="flex items-center space-x-2">
                           {coin.image && (
                             <img 
@@ -456,25 +312,6 @@ export const OptimizedTradingWidget = () => {
                   Xem thêm {coins.length - 10} coins khác
                 </Button>
               )}
-            </div>
-          )}
-          
-          {user && watchlist.length === 0 && (
-            <div className="px-4 py-3 bg-blue-50 border-t text-center">
-              <p className="text-xs text-blue-700 mb-2">
-                Chưa có coin nào trong danh sách
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                asChild
-                className="text-xs h-7"
-              >
-                <Link href="/watchlist">
-                  <Plus className="h-3 w-3 mr-1" />
-                  Quản lý watchlist
-                </Link>
-              </Button>
             </div>
           )}
         </CardContent>
