@@ -29,7 +29,7 @@ interface Comment {
   userFullName: string;
   userAvartar: string;
   content: string;
-  createdDate?: string;
+  createdDate?: string | null;
 }
 
 export default function NewsDetailPage() {
@@ -153,16 +153,26 @@ export default function NewsDetailPage() {
     });
   };
 
-  // Helper functions
-  const formatTimeAgo = (date: string | Date) => {
+  // Helper functions - Sử dụng cùng logic với ngày đăng bài
+  const formatTimeAgo = (date?: string | Date | null) => {
+    if (!date) return 'vừa xong';
+    
     const now = new Date();
-    const commentDate = new Date(date);
-    const diffInSeconds = Math.floor((now.getTime() - commentDate.getTime()) / 1000);
+    const targetDate = new Date(date);
+    
+    // Kiểm tra nếu date không hợp lệ
+    if (isNaN(targetDate.getTime())) {
+      return 'vừa xong';
+    }
+    
+    const diffInSeconds = Math.floor((now.getTime() - targetDate.getTime()) / 1000);
     
     if (diffInSeconds < 60) return 'vừa xong';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
-    return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+    if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)} tháng trước`;
+    return `${Math.floor(diffInSeconds / 31536000)} năm trước`;
   };
 
   // Track initial news view when component mounts
@@ -337,9 +347,9 @@ export default function NewsDetailPage() {
     fetchSavedNews();
   }, [token, id, item]);
 
-  // Fetch comments
+  // Fetch comments - FIXED VERSION - Work for both logged in and anonymous users
   useEffect(() => {
-    if (!item) return;
+    if (!id) return; // Chỉ cần có id, không cần item
 
     const fetchComments = async () => {
       try {
@@ -357,20 +367,28 @@ export default function NewsDetailPage() {
         const data = await response.json();
         
         if (data && data.statusCode === 1) {
-          setComments(data.data || []);
+          // Đảm bảo comments được sắp xếp theo thứ tự mới nhất
+          const sortedComments = (data.data || []).sort((a: Comment, b: Comment) => {
+            if (!a.createdDate && !b.createdDate) return 0;
+            if (!a.createdDate) return 1;
+            if (!b.createdDate) return -1;
+            return new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime();
+          });
+          
+          setComments(sortedComments);
         } else {
           setComments([]);
         }
       } catch (error) {
         console.error("Error fetching comments:", error);
-        setComments([]);
+        setComments([]); // Set empty array on error, không block UI
       }
     };
 
     fetchComments();
-  }, [id, item]);
+  }, [id]); // Chỉ depend vào id, không depend vào item
 
-  // Handle comment submission
+  // Handle comment submission - IMPROVED VERSION
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() || !token) return;
@@ -396,23 +414,37 @@ export default function NewsDetailPage() {
 
       const data = await response.json();
 
-      if (data && data.statusCode === 1 && data.data) {
-        const newCommentObj: Comment = {
-          commentId: data.data.commentId || Date.now(),
-          userId: user?.userId || 0,
-          content: newComment,
-          userFullName: user?.fullname || user?.username || "Anonymous",
-          userAvartar: user?.avatar || "/default-avatar.png"
-        };
+      if (data && data.statusCode === 1) {
+        // Refresh comments list để lấy comment mới từ server với đầy đủ thông tin
+        const commentsResponse = await fetch(`http://localhost:5000/api/Comment/GetListCommentByNews?newsID=${id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
 
-        setComments((prev) => [newCommentObj, ...prev]);
+        if (commentsResponse.ok) {
+          const commentsData = await commentsResponse.json();
+          if (commentsData && commentsData.statusCode === 1) {
+            const sortedComments = (commentsData.data || []).sort((a: Comment, b: Comment) => {
+              if (!a.createdDate && !b.createdDate) return 0;
+              if (!a.createdDate) return 1;
+              if (!b.createdDate) return -1;
+              return new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime();
+            });
+            setComments(sortedComments);
+          }
+        }
+
         setNewComment("");
 
         // Track comment activity
-        trackActivity({
-          activityType: 'COMMENT',
-          relatedNewsId: Number(id)
-        });
+        if (trackActivity) {
+          trackActivity({
+            activityType: 'COMMENT',
+            relatedNewsId: Number(id)
+          });
+        }
       }
     } catch (error) {
       console.error("Error adding comment:", error);
@@ -453,10 +485,12 @@ export default function NewsDetailPage() {
         setIsSaved(prev => !prev);
 
         // Track save post activity
-        trackActivity({
-          activityType: 'SAVE_POST',
-          relatedNewsId: Number(id)
-        });
+        if (trackActivity) {
+          trackActivity({
+            activityType: 'SAVE_POST',
+            relatedNewsId: Number(id)
+          });
+        }
       } else {
         console.error("API returned error:", data);
       }
@@ -574,9 +608,12 @@ export default function NewsDetailPage() {
                   {/* Author Info */}
                   <div className="flex items-center gap-4 mb-6">
                     <img 
-                      src={item.avatar || "/placeholder/48/48.jpg"} 
+                      src={item.avatar || item.userAvartar || "/placeholder/48/48.jpg"} 
                       alt={item.userName} 
-                      className="w-12 h-12 rounded-full border-2 border-white shadow-md" 
+                      className="w-12 h-12 rounded-full border-2 border-white shadow-md object-cover" 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/placeholder/48/48.jpg";
+                      }}
                     />
                     <div className="flex-1">
                       <p className="font-semibold text-gray-900">{item.userName}</p>
@@ -587,7 +624,7 @@ export default function NewsDetailPage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
-                          <span>Hôm nay</span>
+                          <span>{item.createdDate ? formatTimeAgo(item.createdDate) : 'Hôm nay'}</span>
                         </div>
                       </div>
                     </div>
@@ -625,7 +662,7 @@ export default function NewsDetailPage() {
                   </div>
                 </div>
 
-                {/* Comments Section */}
+                {/* Comments Section - IMPROVED */}
                 <div className="border-t border-emerald-100 pt-8">
                   <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
                     <span className="w-1 h-6 bg-emerald-600 rounded-full"></span>
@@ -638,8 +675,11 @@ export default function NewsDetailPage() {
                       <div className="h-8 w-8 rounded-full overflow-hidden flex-shrink-0">
                         <img
                           src={user?.avatar || "/default-avatar.png"}
-                          alt={user?.fullname}
+                          alt={user?.fullname || user?.username || "User"}
                           className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "/default-avatar.png";
+                          }}
                         />
                       </div>
                       <div className="flex-1 flex gap-2">
@@ -674,26 +714,33 @@ export default function NewsDetailPage() {
                     </div>
                   )}
 
-                  {/* Comments List */}
-                  <div className="space-y-3">
+                  {/* Comments List - IMPROVED */}
+                  <div className="space-y-4">
                     {comments.length > 0 ? (
                       comments.slice(0, visibleCount).map((comment, index) => (
-                        <div key={comment.commentId || index} className="flex items-start gap-3">
-                          <div className="h-8 w-8 rounded-full overflow-hidden flex-shrink-0">
+                        <div key={comment.commentId || index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0">
                             <img
                               src={comment.userAvartar || "/default-avatar.png"}
-                              alt={comment.userFullName}
+                              alt={comment.userFullName || "Ẩn danh"}
                               className="h-full w-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "/default-avatar.png";
+                              }}
                             />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="bg-gray-50 rounded-lg p-3">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-semibold text-gray-900 text-sm">{comment.userFullName}</span>
-                                <span className="text-xs text-gray-500">• {comment.createdDate ? formatTimeAgo(comment.createdDate) : 'vừa xong'}</span>
-                              </div>
-                              <p className="text-gray-700 text-sm leading-relaxed">{comment.content}</p>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-semibold text-gray-900 text-sm">
+                                {comment.userFullName || "Ẩn danh"}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                • {formatTimeAgo(comment.createdDate)}
+                              </span>
                             </div>
+                            <p className="text-gray-700 text-sm leading-relaxed bg-white p-3 rounded-lg shadow-sm">
+                              {comment.content}
+                            </p>
                           </div>
                         </div>
                       ))
@@ -762,6 +809,9 @@ export default function NewsDetailPage() {
                               src={post.imagesLink || "/placeholder/80/64.jpg"}
                               alt={post.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "/placeholder/80/64.jpg";
+                              }}
                             />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -820,20 +870,25 @@ export default function NewsDetailPage() {
                         src={post.imagesLink || "/placeholder/400/250.jpg"}
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/placeholder/400/250.jpg";
+                        }}
                       />
                     </div>
                     
                     <div className="p-4 flex-1 flex flex-col">
-                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-                      <img
-                        src={post.userAvartar || post.avatar || "/placeholder/20/20.jpg"}
-                        alt={post.userName}
-                        className="w-5 h-5 rounded-full object-cover border border-gray-200"
-                        onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/placeholder/20/20.jpg";}}/>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
+                        <img
+                          src={post.userAvartar || post.avatar || "/placeholder/20/20.jpg"}
+                          alt={post.userName}
+                          className="w-5 h-5 rounded-full object-cover border border-gray-200"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "/placeholder/20/20.jpg";
+                          }}
+                        />
                         <span>{post.userName}</span>
                         <span>•</span>
-                        <span>{post.timeReading} </span>
+                        <span>{post.timeReading}p đọc</span>
                       </div>
                       <h3 className="font-bold text-gray-900 mb-2 line-clamp-2 group-hover:text-emerald-600 transition-colors">
                         {post.header || post.title}

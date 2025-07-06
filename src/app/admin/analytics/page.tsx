@@ -29,7 +29,6 @@ interface DashboardStats {
 interface DailyStats {
   date: string;
   totalPageViews: number;
-  uniqueVisitors: number;
   newUsers: number;
   newPosts: number;
   newComments: number;
@@ -268,8 +267,12 @@ export default function AdminAnalyticsPage() {
                     <p className="text-xs text-gray-500">lượt xem</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">{day.uniqueVisitors}</p>
-                    <p className="text-xs text-gray-500">người dùng</p>
+                    <p className="text-sm font-medium">{day.newPosts}</p>
+                    <p className="text-xs text-gray-500">bài viết mới</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium">{day.newUsers}</p>
+                    <p className="text-xs text-gray-500">người dùng mới</p>
                   </div>
                 </div>
               </div>
@@ -361,9 +364,6 @@ export default function AdminAnalyticsPage() {
                   Lượt xem
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Người dùng duy nhất
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Người dùng mới
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -390,14 +390,6 @@ export default function AdminAnalyticsPage() {
                       <Eye className="w-4 h-4 text-purple-500 mr-2" />
                       <span className="text-sm font-medium text-gray-900">
                         {day.totalPageViews.toLocaleString()}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Users className="w-4 h-4 text-blue-500 mr-2" />
-                      <span className="text-sm text-gray-900">
-                        {day.uniqueVisitors.toLocaleString()}
                       </span>
                     </div>
                   </td>

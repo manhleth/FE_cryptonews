@@ -52,7 +52,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     {
       href: "/admin/analytics", // Add analytics menu item
       icon: BarChart3,
-      label: "Thống kê & Phân tích"
+      label: "Thống kê "
     }
   ];
 

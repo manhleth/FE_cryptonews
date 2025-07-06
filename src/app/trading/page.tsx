@@ -1241,16 +1241,6 @@ export default function TradingPage() {
                               </>
                             )}
                           </Button>
-
-                          {/* Test Contract Button */}
-                          <Button
-                            onClick={testWETHContract}
-                            variant="outline"
-                            size="sm"
-                            className="w-full mt-2"
-                          >
-                            🔧 Test WETH Contract
-                          </Button>
                         </div>
                       </div>
                     </div>

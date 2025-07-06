@@ -78,53 +78,130 @@ export const HeaderCrypto = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // ------------------------------------
-  // USER MANAGEMENT FUNCTIONS
+  // DEBUG FUNCTIONS
   // ------------------------------------
+  
+  const debugAuthState = () => {
+    console.log("=== AUTH DEBUG ===");
+    console.log("authUser from context:", authUser);
+    console.log("user state:", user);
+    console.log("sessionStorage user:", sessionStorage.getItem("user"));
+    console.log("sessionStorage token:", sessionStorage.getItem("token"));
+    console.log("pathname:", pathname);
+    console.log("==================");
+  };
+
+  const checkAuthState = () => {
+    const hasAuthUser = !!authUser;
+    const hasSessionUser = !!sessionStorage.getItem("user");
+    const hasSessionToken = !!sessionStorage.getItem("token");
+    
+    console.log("Auth state check:", {
+      hasAuthUser,
+      hasSessionUser, 
+      hasSessionToken,
+      currentUser: user
+    });
+    
+    return hasAuthUser || hasSessionUser || hasSessionToken;
+  };
+
+  // USER MANAGEMENT FUNCTIONS
   
   // Update user from auth context and session storage
   useEffect(() => {
-    // Ưu tiên authUser từ AuthContext, fallback về sessionStorage
-    if (authUser) {
-      setUser(authUser);
-    } else {
+    const updateUserState = () => {
+      // Ưu tiên authUser từ AuthContext
+      if (authUser) {
+        console.log("Setting user from AuthContext:", authUser);
+        setUser(authUser);
+        return;
+      }
+      
+      // Fallback về sessionStorage
       const storedUser = sessionStorage.getItem("user");
-      setUser(storedUser ? JSON.parse(storedUser) : null);
-    }
+      const storedToken = sessionStorage.getItem("token");
+      
+      if (storedUser && storedToken) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          console.log("Setting user from sessionStorage:", parsedUser);
+          setUser(parsedUser);
+        } catch (error) {
+          console.error("Error parsing stored user:", error);
+          // Nếu data bị corrupt, xóa luôn
+          sessionStorage.removeItem("user");
+          sessionStorage.removeItem("token");
+          setUser(null);
+        }
+      } else {
+        console.log("No user found, setting to null");
+        setUser(null);
+      }
+    };
+    
+    updateUserState();
   }, [authUser]);
 
   // Listen for user session changes
   useEffect(() => {
-    const updateUserFromSession = () => {
-      const storedUser = sessionStorage.getItem("user");
+    const handleStorageChange = (e: StorageEvent) => {
+      // Chỉ xử lý khi không có authUser từ context
       if (!authUser) {
-        setUser(storedUser ? JSON.parse(storedUser) : null);
+        const storedUser = sessionStorage.getItem("user");
+        const storedToken = sessionStorage.getItem("token");
+        
+        if (!storedUser || !storedToken) {
+          console.log("Storage cleared, logging out user");
+          setUser(null);
+        } else {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+          } catch (error) {
+            console.error("Error parsing user from storage:", error);
+            setUser(null);
+          }
+        }
       }
     };
 
-    // Listen for storage changes (cross-tab)
-    window.addEventListener("storage", updateUserFromSession);
-    
-    // Listen for custom storage changes (same tab)
-    window.addEventListener("storageChange", updateUserFromSession);
+    const handleCustomStorageChange = (e: Event) => {
+      // Chỉ xử lý khi không có authUser từ context
+      if (!authUser) {
+        const storedUser = sessionStorage.getItem("user");
+        const storedToken = sessionStorage.getItem("token");
+        
+        if (!storedUser || !storedToken) {
+          console.log("Storage cleared, logging out user");
+          setUser(null);
+        } else {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+          } catch (error) {
+            console.error("Error parsing user from storage:", error);
+            setUser(null);
+          }
+        }
+      }
+    };
 
-    // Cleanup event listeners
+    // Listen for storage changes
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("storageChange", handleCustomStorageChange);
+
     return () => {
-      window.removeEventListener("storage", updateUserFromSession);
-      window.removeEventListener("storageChange", updateUserFromSession);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("storageChange", handleCustomStorageChange);
     };
   }, [authUser]);
 
-  // ------------------------------------
-  // CHECK USER ROLE
-  // ------------------------------------
-  
   // Kiểm tra user có phải admin không
   const isAdmin = user?.roleId === 1;
   const isUser = user?.roleId === 0;
 
-  // ------------------------------------
   // CATEGORIES MANAGEMENT
-  // ------------------------------------
   
   // Fetch categories from API
   useEffect(() => {
@@ -262,23 +339,40 @@ export const HeaderCrypto = () => {
   // AUTHENTICATION HANDLERS
   // ------------------------------------
   
-  // Handle user sign out
-  const handleSignOut = () => {
-    const storedUser = sessionStorage.getItem("user");
-    const storedToken = sessionStorage.getItem("token");
-
-    if (storedUser || storedToken) {
-      // Clear session storage
+  // Handle user sign out - FIXED VERSION
+  const handleSignOut = async () => {
+    try {
+      console.log("Bắt đầu đăng xuất...");
+      
+      // 1. Gọi logout từ AuthContext trước (nếu có)
+      if (logout) {
+        await logout();
+        console.log("Đã gọi logout từ AuthContext");
+      }
+      
+      // 2. Xóa tất cả dữ liệu trong sessionStorage
       sessionStorage.removeItem("user");
       sessionStorage.removeItem("token");
+      console.log("Đã xóa sessionStorage");
       
-      // Update state and redirect
+      // 3. Dispatch custom event để thông báo cho các component khác
+      window.dispatchEvent(new Event('storageChange'));
+      
+      // 4. Reset state local
       setUser(null);
-      if (logout) logout();
+      console.log("Đã reset user state");
+      
+      // 5. Chuyển hướng
       router.push("/User/Login");
-    } else {
+      console.log("Đã chuyển hướng đến trang login");
+      
+    } catch (error) {
+      console.error("Lỗi khi đăng xuất:", error);
+      
+      // Nếu có lỗi, vẫn thực hiện cleanup cơ bản
+      sessionStorage.clear(); // Xóa toàn bộ sessionStorage
+      setUser(null);
       router.push("/User/Login");
-      console.log("Không có thông tin đăng nhập để xóa.");
     }
   };
 
@@ -312,6 +406,7 @@ export const HeaderCrypto = () => {
               <div className="flex flex-col">
                 <span className="text-2xl font-bold text-emerald-600">ALL-IN</span>
                 <span className="text-sm font-medium text-emerald-600 tracking-wider">CRYPTOINSIGHTS</span>
+                {/* <img src="/images/logo.png" alt="ALL-IN Logo" className="h-8 w-auto" /> */}
               </div>
             </Link>
 
@@ -363,19 +458,6 @@ export const HeaderCrypto = () => {
                 Watchlist
               </Link>
             )}
-
-            {/* Phân tích Link - chỉ hiển thị cho admin */}
-            {isAdmin && (
-              <Link 
-                href="/analytics"
-                className={`text-gray-600 hover:text-gray-900 pb-1 flex items-center gap-1 ${
-                  pathname === '/analytics' ? 'border-b border-gray-900' : ''
-                }`}
-              >
-                Phân tích
-              </Link>
-            )}
-            
             {/* Categories Navigation */}
             {loading ? (
               <span>Đang tải...</span>
@@ -410,9 +492,12 @@ export const HeaderCrypto = () => {
                 <DropdownMenuTrigger asChild>
                   <div className="flex items-center cursor-pointer hover:opacity-80 transition-opacity">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={user.avatar || "/default-avatar.png"} alt={user.fullname} />
+                      <AvatarImage 
+                        src={user.avatar || "/default-avatar.png"} 
+                        alt={user.fullname || user.username || "User"} 
+                      />
                       <AvatarFallback className="bg-emerald-100 text-emerald-700">
-                        {user.fullname?.charAt(0)?.toUpperCase() || user.username?.charAt(0)?.toUpperCase() || "U"}
+                        {(user.fullname || user.username || "U").charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                   </div>

@@ -2,7 +2,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { AlertTriangle, Wifi, WifiOff } from "lucide-react";
-import { cryptoAPI } from "@/services/cryptoApi";
+import { optimizedCryptoAPI } from "@/services/optimizedCryptoApi";
 
 interface CryptoPrice {
   name: string;
@@ -29,7 +29,7 @@ export const CryptoTicker = () => {
         console.log('🔄 Fetching crypto prices for ticker...');
         
         // Fetch top 10 coins for ticker
-        const data = await cryptoAPI.getTopCoins(10);
+        const data = await optimizedCryptoAPI.getTopCoins(10);
 
         if (data && data.length > 0) {
           const updatedPrices: CryptoPrice[] = data.map((coin: any) => ({
@@ -44,10 +44,6 @@ export const CryptoTicker = () => {
           setPrices(updatedPrices);
           setRetryCount(0);
           
-          // Check if using fallback data
-          if (data[0]?.error) {
-            setConnectionStatus('limited');
-          }
         } else {
           throw new Error('No data received');
         }
@@ -74,12 +70,12 @@ export const CryptoTicker = () => {
     // Initial fetch
     fetchPrices();
     
-    // Auto refresh every 3 minutes (safe for 30 calls/min limit)
+    // Auto refresh every 5 minutes (safe for rate limits)
     const interval = setInterval(() => {
       if (connectionStatus !== 'offline') {
         fetchPrices();
       }
-    }, 180000); // 3 minutes instead of 30 seconds
+    }, 300000); // 5 minutes
 
     return () => clearInterval(interval);
   }, [connectionStatus, retryCount, maxRetries]);
@@ -93,7 +89,7 @@ export const CryptoTicker = () => {
         symbol: 'BTC',
         price: 43000,
         change: 2.5,
-        icon: '/placeholder/32/32.jpg'
+        icon: 'https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png'
       },
       {
         id: 'ethereum',
@@ -101,7 +97,7 @@ export const CryptoTicker = () => {
         symbol: 'ETH',
         price: 2600,
         change: -1.2,
-        icon: '/placeholder/32/32.jpg'
+        icon: 'https://coin-images.coingecko.com/coins/images/279/large/ethereum.png'
       },
       {
         id: 'binancecoin',
@@ -109,7 +105,7 @@ export const CryptoTicker = () => {
         symbol: 'BNB',
         price: 300,
         change: 0.8,
-        icon: '/placeholder/32/32.jpg'
+        icon: 'https://coin-images.coingecko.com/coins/images/825/large/bnb-icon2_2x.png'
       }
     ];
   };
@@ -174,7 +170,7 @@ export const CryptoTicker = () => {
                   {Math.abs(crypto.change).toFixed(2)}%
                 </span>
                 {connectionStatus === 'limited' && index === 0 && (
-                  <span className="ml-2 text-xs text-yellow-600">(Demo API)</span>
+                  <span className="ml-2 text-xs text-yellow-600">(Limited Data)</span>
                 )}
               </span>
             ))
@@ -199,21 +195,6 @@ export const CryptoTicker = () => {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Attribution footer (required for Demo API) */}
-      <div className="bg-gray-50 py-1 px-4 text-center">
-        <span className="text-xs text-gray-500">
-          Data provided by{" "}
-          <a 
-            href="https://www.coingecko.com/en/api" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-emerald-600 hover:underline"
-          >
-            CoinGecko
-          </a>
-        </span>
       </div>
     </div>
   );

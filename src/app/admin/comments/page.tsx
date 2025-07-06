@@ -13,6 +13,40 @@ import {
   FileText
 } from "lucide-react";
 
+// Avatar Component with error handling
+const Avatar = ({ src, alt, size = 'md' }: { src?: string; alt: string; size?: 'sm' | 'md' | 'lg' }) => {
+  const [imageError, setImageError] = useState(false);
+  
+  const sizeClasses = {
+    sm: 'w-6 h-6',
+    md: 'w-8 h-8', 
+    lg: 'w-12 h-12'
+  };
+  
+  const iconSizes = {
+    sm: 'w-3 h-3',
+    md: 'w-4 h-4',
+    lg: 'w-6 h-6'
+  };
+
+  if (!src || imageError) {
+    return (
+      <div className={`${sizeClasses[size]} rounded-full bg-blue-100 flex items-center justify-center`}>
+        <User className={`${iconSizes[size]} text-blue-600`} />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={`${sizeClasses[size]} rounded-full object-cover`}
+      onError={() => setImageError(true)}
+    />
+  );
+};
+
 type Comment = {
   commentId: number;
   userId: number;
@@ -20,7 +54,7 @@ type Comment = {
   userFullName: string;
   userAvartar: string;
   newsId: number;
-  newsTitle?: string;
+  newsTitle: string;
   createdDate: string;
 };
 
@@ -84,66 +118,25 @@ export default function CommentsPage() {
         console.log("First comment structure:", commentData[0]);
       }
 
-      // Lấy danh sách tất cả news để map với comment
-      const newsResponse = await fetch("http://localhost:5000/api/News/GetAllNewAdmin", {
-        headers: {
-          "Authorization": `Bearer ${valueToken}`,
-        },
-      });
-      
-      let allNews = [];
-      if (newsResponse.ok) {
-        const newsResult = await newsResponse.json();
-        console.log("All News API Response:", newsResult);
-        if (newsResult.data) {
-          allNews = newsResult.data;
-        } else if (newsResult.Data) {
-          allNews = newsResult.Data;
-        } else if (Array.isArray(newsResult)) {
-          allNews = newsResult;
-        }
-      }
-
-      // Map comments với thông tin từ news
-      const commentsWithNewsInfo = commentData.map((comment: any) => {
-        // Dựa vào ListCommentResponseDto structure sau khi update:
-        // CommentId, UserId, Content, UserFullName, UserAvartar, NewsId, CreatedDate
-        const commentId = comment.commentId || comment.CommentId;
-        const userId = comment.userId || comment.UserId;
-        const content = comment.content || comment.Content;
-        const userFullName = comment.userFullName || comment.UserFullName;
-        const userAvatar = comment.userAvartar || comment.UserAvartar;
-        const newsId = comment.newsId || comment.NewsId;
-        const createdDate = comment.createdDate || comment.CreatedDate;
-
-        // Tìm news tương ứng
-        let newsTitle = "Không xác định";
-        if (newsId && allNews.length > 0) {
-          const relatedNews = allNews.find((news: any) => {
-            const newsIdToCompare = news.newsId || news.NewsId || news.id;
-            return newsIdToCompare === newsId;
-          });
-          if (relatedNews) {
-            newsTitle = relatedNews.title || relatedNews.Title || relatedNews.header || relatedNews.Header || "Không có tiêu đề";
-          }
-        }
-
+      // FIXED: Sử dụng dữ liệu đã được xử lý từ backend
+      const processedComments = commentData.map((comment: any) => {
+        // Backend đã trả về AdminCommentResponseDto với đầy đủ thông tin
         const mappedComment = {
-          commentId: commentId,
-          userId: userId,
-          content: content || "Không có nội dung",
-          userFullName: userFullName || "Không xác định",
-          userAvartar: userAvatar || "",
-          newsId: newsId,
-          newsTitle: newsTitle,
-          createdDate: createdDate || new Date().toISOString(),
+          commentId: comment.commentId || comment.CommentId,
+          userId: comment.userId || comment.UserId,
+          content: comment.content || comment.Content || "Không có nội dung",
+          userFullName: comment.userFullName || comment.UserFullName || "Không xác định",
+          userAvartar: comment.userAvartar || comment.UserAvartar || "",
+          newsId: comment.newsId || comment.NewsId,
+          newsTitle: comment.newsTitle || comment.NewsTitle || "Không xác định",
+          createdDate: comment.createdDate || comment.CreatedDate || new Date().toISOString(),
         };
 
         console.log("Mapped comment:", mappedComment);
         return mappedComment;
       });
 
-      setComments(commentsWithNewsInfo);
+      setComments(processedComments);
       setSelectedComments([]);
     } catch (err: any) {
       console.error("Fetch comments error:", err);
@@ -280,6 +273,7 @@ export default function CommentsPage() {
   };
 
   const truncateText = (text: string, maxLength: number = 100) => {
+    if (!text) return "N/A";
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
   };
@@ -415,17 +409,11 @@ export default function CommentsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                        {comment.userAvartar ? (
-                          <img 
-                            src={comment.userAvartar} 
-                            alt={comment.userFullName} 
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                        ) : (
-                          <User className="w-4 h-4 text-blue-600" />
-                        )}
-                      </div>
+                      <Avatar 
+                        src={comment.userAvartar} 
+                        alt={comment.userFullName} 
+                        size="md"
+                      />
                       <div>
                         <p className="text-sm font-medium text-gray-900">{comment.userFullName}</p>
                         <p className="text-xs text-gray-500">ID: {comment.userId}</p>
@@ -445,7 +433,7 @@ export default function CommentsPage() {
                         <FileText className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
                         <div>
                           <p className="text-sm text-gray-900 font-medium" title={comment.newsTitle}>
-                            {truncateText(comment.newsTitle || "Không xác định", 60)}
+                            {truncateText(comment.newsTitle, 60)}
                           </p>
                           <p className="text-xs text-gray-500">ID: {comment.newsId}</p>
                         </div>

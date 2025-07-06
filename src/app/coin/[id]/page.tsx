@@ -83,7 +83,7 @@ export default function CoinDetailPage({ params }: CoinDetailProps) {
     symbol: id.toUpperCase(),
     name: id.charAt(0).toUpperCase() + id.slice(1),
     image: {
-      large: '/placeholder/200/200.jpg'
+      large: `https://coin-images.coingecko.com/coins/images/1/large/${id}.png`
     },
     description: {
       en: 'Thông tin chi tiết không khả dụng do lỗi kết nối. Vui lòng thử lại sau.'
@@ -151,7 +151,7 @@ export default function CoinDetailPage({ params }: CoinDetailProps) {
       console.error('Error fetching coin details:', error);
       setRetryCount(prev => prev + 1);
       
-      if (error.message === 'RATE_LIMITED') {
+      if (error.message === 'RATE_LIMITED' || error.message === 'CIRCUIT_BREAKER_OPEN') {
         setConnectionStatus('limited');
         toast({
           title: "Giới hạn API",
@@ -282,18 +282,18 @@ export default function CoinDetailPage({ params }: CoinDetailProps) {
   // Format functions
   const formatPrice = (price: number) => {
     if (price >= 1) {
-      return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return `${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     } else {
-      return `$${price.toFixed(6)}`;
+      return `${price.toFixed(6)}`;
     }
   };
 
   const formatLargeNumber = (num: number) => {
-    if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
-    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-    if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-    if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
-    return `$${num.toFixed(2)}`;
+    if (num >= 1e12) return `${(num / 1e12).toFixed(2)}T`;
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
+    return `${num.toFixed(2)}`;
   };
 
   const formatSupply = (num: number) => {
@@ -631,4 +631,4 @@ export default function CoinDetailPage({ params }: CoinDetailProps) {
       </div>
     </div>
   );
-} 
+}
